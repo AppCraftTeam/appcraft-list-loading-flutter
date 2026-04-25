@@ -1,0 +1,17 @@
+# Dart/Flutter
+.dart_tool/
+.packages
+build/
+coverage/
+
+# Pub (library-пакет — lock-файл не коммитится)
+pubspec.lock
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
