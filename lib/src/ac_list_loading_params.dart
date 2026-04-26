@@ -1,9 +1,11 @@
 /// Base contract for loading parameters accepted by the list dispatcher.
 ///
 /// A user-defined parameters type (passed to `reload` and `loadMore`) must
-/// mix in one of the concrete mixins — [ACOffsetParamsMixin] for
-/// offset-based pagination or [ACCursorListLoadingParamsMixin] for
-/// cursor-based pagination — both built on top of this base mixin.
+/// mix in this base mixin. For offset-based pagination, additionally mix in
+/// [ACOffsetParamsMixin]. For cursor-based pagination (or any other custom
+/// pagination scheme), declare your own field on the params class — the
+/// dispatcher does not read pagination fields itself; they are meant for
+/// the loader when building a request.
 ///
 /// The base mixin carries two fields:
 /// - [limit] — informational, not used by the dispatcher (it is meant for
@@ -49,41 +51,15 @@ mixin ACParamsMixin {
 ///   final String? query;
 /// }
 /// ```
+///
+/// For cursor-based pagination, declare your own `cursor` field on the
+/// params class with [ACParamsMixin] alone — no dedicated mixin is
+/// required. To carry the next-page cursor returned by the server, use
+/// `dispatcher.lastResult?.<your_cursor_field>` after a successful load.
 mixin ACOffsetParamsMixin on ACParamsMixin {
   /// Offset for offset-based pagination.
   ///
   /// Informational field: the dispatcher does not read it. A value `>= 0`
   /// is recommended; validation is up to the consumer.
   int? get offset;
-}
-
-/// Cursor pagination parameters.
-///
-/// Built on top of [ACParamsMixin] by adding the [cursor]
-/// field — an opaque identifier of the next page returned by the data
-/// source in its response. The dispatcher does not read this field;
-/// keeping the current cursor between `reload`/`loadMore` calls is the
-/// consumer's responsibility.
-///
-/// Typical usage:
-///
-/// ```dart
-/// final class UserCursorParams
-///     with ACParamsMixin, ACCursorListLoadingParamsMixin {
-///   const UserCursorParams({this.limit, this.cursor, this.query});
-///
-///   @override
-///   final int? limit;
-///   @override
-///   final String? cursor;
-///   @override
-///   final String? query;
-/// }
-/// ```
-mixin ACCursorListLoadingParamsMixin on ACParamsMixin {
-  /// Opaque cursor of the next page (or `null` before the first load /
-  /// on the last page).
-  ///
-  /// Informational field: the dispatcher does not read it.
-  String? get cursor;
 }

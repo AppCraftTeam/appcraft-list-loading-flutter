@@ -16,8 +16,9 @@ without imposing any specific state-management library (it extends
 
 - Offset pagination via `ACDefaultDispatcher` and
   `ACOffsetParamsMixin`.
-- Cursor pagination via `ACCursorListLoadingParamsMixin` and any DTO with
-  the `ACResult` mixin.
+- Cursor pagination via a custom `cursor` field on your params class +
+  `ACCustomDispatcher` + any DTO with the `ACResult` mixin. Use
+  `dispatcher.lastResult?.<your_cursor_field>` to feed the next `loadMore`.
 - DTO responses with explicit `hasMore` via `ACCustomDispatcher` +
   `ACResultParser`.
 - Debounced search with `minLength` via `ACDebouncedSearchStrategy`.
@@ -90,13 +91,11 @@ final class UserPage with ACResult<User> {
   final String? nextCursor;
 }
 
-final class UserCursorParams
-    with ACParamsMixin, ACCursorListLoadingParamsMixin {
+final class UserCursorParams with ACParamsMixin {
   const UserCursorParams({this.limit, this.cursor, this.query});
 
   @override
   final int? limit;
-  @override
   final String? cursor;
   @override
   final String? query;
@@ -107,6 +106,15 @@ final dispatcher =
 
 await dispatcher.reload(
   params: const UserCursorParams(limit: 20),
+  load: (p) => api.fetchUsersPage(cursor: p.cursor, limit: p.limit),
+);
+
+// Carry the next-page cursor through the dispatcher's lastResult getter:
+await dispatcher.loadMore(
+  params: UserCursorParams(
+    limit: 20,
+    cursor: dispatcher.lastResult?.nextCursor,
+  ),
   load: (p) => api.fetchUsersPage(cursor: p.cursor, limit: p.limit),
 );
 ```
@@ -237,7 +245,6 @@ class' API docs. In particular, `ACDefaultDispatcher` extends
 - `ACResult<T>` — DTO contract mixin (`items`, `hasMore`).
 - `ACParamsMixin` — base parameters mixin (`limit`, `query`).
 - `ACOffsetParamsMixin` — offset pagination mixin (`offset`).
-- `ACCursorListLoadingParamsMixin` — cursor pagination mixin (`cursor`).
 - `ACSearchStrategy` — search strategy contract (`schedule`, `cancel`,
   `dispose`).
 - `ACDebouncedSearchStrategy` — search strategy implementation with

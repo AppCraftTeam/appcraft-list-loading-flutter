@@ -26,13 +26,16 @@ final class _TestParams
 
 /// Cursor-based params — used by the `ACCustomDispatcher` where
 /// the loader returns a DTO that mixes [ACResult].
-final class _TestCursorParams
-    with ACParamsMixin, ACCursorListLoadingParamsMixin {
+///
+/// Cursor pagination does not require a dedicated mixin: the dispatcher
+/// does not read the cursor field — it is purely informational for the
+/// loader. Declaring a plain `String? cursor` field on the params class
+/// is enough.
+final class _TestCursorParams with ACParamsMixin {
   const _TestCursorParams({this.limit, this.cursor, this.query});
 
   @override
   final int? limit;
-  @override
   final String? cursor;
   @override
   final String? query;
@@ -669,8 +672,8 @@ void main() {
 
   group('ACDispatcher — params subtype polymorphism (Phase 8)', () {
     test(
-        'ACCustomDispatcher accepts ACCursorListLoadingParamsMixin '
-        'subtype', () async {
+        'ACCustomDispatcher accepts cursor-style params (custom field, '
+        'no dedicated mixin)', () async {
       // Arrange — cursor params + DTO-based response.
       final dispatcher = ACCustomDispatcher<_TestCursorParams,
           _TestPage<int>, int>();
@@ -683,9 +686,10 @@ void main() {
         load: loader.call,
       );
 
-      // Assert
+      // Assert — params satisfy the base ACParamsMixin contract; the
+      // cursor field is a plain field readable through the concrete type.
       expect(dispatcher.items, equals(<int>[10, 20]));
-      expect(loader.calls.single, isA<ACCursorListLoadingParamsMixin>());
+      expect(loader.calls.single, isA<ACParamsMixin>());
       expect((loader.calls.single as _TestCursorParams).cursor, isNull);
 
       dispatcher.dispose();
