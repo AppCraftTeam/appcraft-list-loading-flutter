@@ -1,42 +1,41 @@
 import 'ac_list_loading_params.dart';
 import 'ac_list_loading_result.dart';
 
-/// Стратегия извлечения элементов и флага `hasMore` из результата loader'а.
+/// Strategy for extracting items and the `hasMore` flag from the loader
+/// result.
 ///
-/// Parser позволяет диспатчеру работать с произвольным типом ответа [R]
-/// без обязательной обёртки в [ACListLoadingResult]. Это полезно, когда
-/// источник возвращает «голый» список (`List<T>`) или DTO со своей схемой
-/// полей.
+/// The parser allows the dispatcher to work with an arbitrary response
+/// type [R] without requiring it to be wrapped in [ACListLoadingResult].
+/// This is useful when the source returns a plain list (`List<T>`) or a
+/// DTO with its own field schema.
 ///
-/// Контракт:
-/// - [extractItems] должен возвращать элементы текущей страницы без
-///   побочных эффектов. Для `reload` диспатчер заменяет накопленный список
-///   результатом, для `loadMore` — добавляет в конец.
-/// - [hasMore] синхронно вычисляет наличие следующей страницы по
-///   результату и/или переданным параметрам. Исключения из методов
-///   parser'а пробрасываются наружу из `reload`/`loadMore`.
+/// Contract:
+/// - [extractItems] must return the items of the current page without
+///   side effects. For `reload` the dispatcher replaces the accumulated
+///   list with the result; for `loadMore` it appends to the end.
+/// - [hasMore] synchronously computes whether a next page is available
+///   from the result and/or the passed parameters. Exceptions thrown by
+///   parser methods propagate out of `reload`/`loadMore`.
 abstract class ACListLoadingParser<P extends ACListLoadingParamsMixin, R, T> {
-  /// Конструктор — `const`, чтобы подклассы могли объявлять
-  /// `const`-инстансы.
+  /// Const constructor so that subclasses can declare `const` instances.
   const ACListLoadingParser();
 
-  /// Извлекает элементы текущей страницы из [result].
+  /// Extracts the items of the current page from [result].
   List<T> extractItems(P params, R result);
 
-  /// Определяет, есть ли ещё страницы для догрузки.
+  /// Determines whether more pages are available to load.
   bool hasMore(P params, R result);
 }
 
-/// Parser для offset-пагинации: loader возвращает голый `List<T>`.
+/// Parser for offset pagination: the loader returns a plain `List<T>`.
 ///
-/// `hasMore` вычисляется как `result.length >= params.limit`. Если
-/// [ACListLoadingParamsMixin.limit] равен `null`, считается, что источник
-/// лимита не имеет и страницы могут продолжаться бесконечно
-/// (`hasMore == true`).
+/// `hasMore` is computed as `result.length >= params.limit`. If
+/// [ACListLoadingParamsMixin.limit] is `null`, the source is assumed to
+/// have no limit and pages may continue indefinitely (`hasMore == true`).
 final class ACDefaultListLoadingParser<
     P extends ACOffsetListLoadingParamsMixin, T>
     implements ACListLoadingParser<P, List<T>, T> {
-  /// Создаёт parser. Экземпляр можно объявлять как `const`.
+  /// Creates a parser. The instance can be declared as `const`.
   const ACDefaultListLoadingParser();
 
   @override
@@ -50,15 +49,15 @@ final class ACDefaultListLoadingParser<
   }
 }
 
-/// Parser для DTO, подмешавших [ACListLoadingResult].
+/// Parser for DTOs that mix in [ACListLoadingResult].
 ///
-/// Делегирует оба метода напрямую геттерам результата: [extractItems]
-/// возвращает `result.items`, [hasMore] — `result.hasMore`.
+/// Delegates both methods directly to the result getters: [extractItems]
+/// returns `result.items`, [hasMore] returns `result.hasMore`.
 final class ACResultListLoadingParser<
     P extends ACListLoadingParamsMixin,
     R extends ACListLoadingResult<T>,
     T> implements ACListLoadingParser<P, R, T> {
-  /// Создаёт parser. Экземпляр можно объявлять как `const`.
+  /// Creates a parser. The instance can be declared as `const`.
   const ACResultListLoadingParser();
 
   @override

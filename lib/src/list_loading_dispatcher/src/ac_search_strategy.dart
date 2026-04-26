@@ -1,49 +1,51 @@
 import 'dart:async';
 
-/// Поведенческий компонент, определяющий, нужно ли запускать загрузку для
-/// переданного query и когда именно.
+/// Behavioural component that decides whether a load should be started
+/// for a given query, and when.
 ///
-/// Используется диспатчером внутри `reload`. Знание о debounce-таймере и
-/// последнем применённом query инкапсулировано здесь — диспатчер не хранит
-/// `_debounceTimer` / `_lastAppliedQuery` самостоятельно.
+/// Used by the dispatcher inside `reload`. Knowledge of the debounce
+/// timer and the last applied query is encapsulated here — the
+/// dispatcher does not keep `_debounceTimer` / `_lastAppliedQuery` of
+/// its own.
 abstract class ACSearchStrategy {
-  /// Решает, нужно ли запускать загрузку для [query], и когда.
+  /// Decides whether to start a load for [query], and when.
   ///
-  /// Возвращает:
-  /// - `null` — отказ по `minLength`: вызывающий должен очистить items и
-  ///   **не** выполнять загрузку;
-  /// - `Future<void>` — когда резолвится, загрузку можно стартовать (может
-  ///   резолвиться мгновенно или после debounce).
+  /// Returns:
+  /// - `null` — rejection by `minLength`: the caller must clear items
+  ///   and **not** perform a load;
+  /// - `Future<void>` — when it resolves, the load can be started (it
+  ///   may resolve immediately or after a debounce).
   ///
-  /// Повторный вызов [schedule] отменяет предыдущий pending-таймер.
+  /// Calling [schedule] again cancels the previously pending timer.
   Future<void>? schedule(String? query);
 
-  /// Отменить pending-таймер, если он запланирован.
+  /// Cancels the pending timer if one is scheduled.
   void cancel();
 
-  /// Освободить внутренние ресурсы (таймер).
+  /// Releases internal resources (the timer).
   void dispose();
 }
 
-/// Дефолтная реализация [ACSearchStrategy]: debounce + minLength +
-/// отслеживание последнего применённого query.
+/// Default [ACSearchStrategy] implementation: debounce + minLength +
+/// tracking of the last applied query.
 ///
-/// Поведение [schedule] для query:
-/// - `null` / пустая строка: `_lastAppliedQuery` сбрасывается, возвращается
-///   уже завершённый `Future` (мгновенный запуск);
-/// - короче [minLength]: `_lastAppliedQuery` обновляется, возвращается
-///   `null` — вызывающий трактует это как отказ;
-/// - совпадает с `_lastAppliedQuery`: возвращается уже завершённый `Future`;
-/// - изменился и удовлетворяет [minLength]:
-///   - при [debounce] `== Duration.zero` — `_lastAppliedQuery` обновляется
-///     сразу, возвращается завершённый `Future`;
-///   - иначе стартует `Timer(debounce, ...)`; по срабатыванию
-///     `_lastAppliedQuery` обновляется и completer завершается.
+/// Behaviour of [schedule] for a query:
+/// - `null` / empty string: `_lastAppliedQuery` is reset, an already
+///   completed `Future` is returned (immediate launch);
+/// - shorter than [minLength]: `_lastAppliedQuery` is updated, `null`
+///   is returned — the caller treats this as a rejection;
+/// - equal to `_lastAppliedQuery`: an already completed `Future` is
+///   returned;
+/// - changed and satisfies [minLength]:
+///   - if [debounce] `== Duration.zero` — `_lastAppliedQuery` is
+///     updated immediately and a completed `Future` is returned;
+///   - otherwise a `Timer(debounce, ...)` is started; on its tick
+///     `_lastAppliedQuery` is updated and the completer completes.
 final class ACDebouncedSearchStrategy implements ACSearchStrategy {
-  /// Создаёт стратегию с кастомными [debounce] и [minLength].
+  /// Creates a strategy with custom [debounce] and [minLength].
   ///
-  /// По умолчанию: `debounce = 300мс`, `minLength = 3`. Оба параметра
-  /// должны быть неотрицательными — проверяется рантайм-ассертами.
+  /// Defaults: `debounce = 300ms`, `minLength = 3`. Both parameters
+  /// must be non-negative — checked by runtime asserts.
   ACDebouncedSearchStrategy({
     this.debounce = const Duration(milliseconds: 300),
     this.minLength = 3,
@@ -53,10 +55,10 @@ final class ACDebouncedSearchStrategy implements ACSearchStrategy {
         ),
         assert(minLength >= 0, 'minLength must be non-negative');
 
-  /// Задержка перед фактическим стартом загрузки для изменившегося query.
+  /// Delay before the actual load is started for a changed query.
   final Duration debounce;
 
-  /// Минимальная длина query, при которой поиск активируется.
+  /// Minimum query length at which the search activates.
   final int minLength;
 
   String? _lastAppliedQuery;
@@ -67,24 +69,24 @@ final class ACDebouncedSearchStrategy implements ACSearchStrategy {
     _timer?.cancel();
     _timer = null;
 
-    // Пустой query — мгновенный запуск, сбрасываем last-applied.
+    // Empty query — immediate launch, reset last-applied.
     if (query == null || query.isEmpty) {
       _lastAppliedQuery = null;
       return Future<void>.value();
     }
 
-    // Короче minLength — отказ (вызывающий очистит items).
+    // Shorter than minLength — rejection (the caller will clear items).
     if (query.length < minLength) {
       _lastAppliedQuery = query;
       return null;
     }
 
-    // Совпал с последним применённым — мгновенный запуск.
+    // Equal to the last applied — immediate launch.
     if (query == _lastAppliedQuery) {
       return Future<void>.value();
     }
 
-    // Изменился + удовлетворяет minLength: debounce (или сразу при zero).
+    // Changed + satisfies minLength: debounce (or immediate when zero).
     if (debounce == Duration.zero) {
       _lastAppliedQuery = query;
       return Future<void>.value();

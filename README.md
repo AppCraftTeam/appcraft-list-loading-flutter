@@ -3,29 +3,29 @@
 [![Pub Version](https://img.shields.io/pub/v/appcraft_list_loading_flutter)](https://pub.dev/packages/appcraft_list_loading_flutter)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Single-purpose Flutter-пакет для пагинированной загрузки списков. Содержит
-диспатчер `ACListLoadingDispatcher`, который инкапсулирует жизненный цикл
-загрузок (reload / loadMore / cancel / dispose), переиспользуемые парсеры
-для «голого» `List<T>` и DTO-ответов, миксины параметров для offset- и
-cursor-пагинации, а также готовые стратегии поиска с debounce и отмены
-загрузки. Подходит для любых списков с подгрузкой по страницам, поисковой
-строкой и pull-to-refresh — без навязывания какой-либо state-management
-библиотеки (наследуется от `ChangeNotifier`).
+A single-purpose Flutter package for paginated list loading. It provides the
+`ACListLoadingDispatcher`, which encapsulates the loading lifecycle
+(reload / loadMore / cancel / dispose), reusable parsers for plain `List<T>`
+and DTO responses, parameter mixins for offset- and cursor-based pagination,
+and ready-to-use strategies for debounced search and load cancellation.
+Suitable for any list with pagination, a search field and pull-to-refresh —
+without imposing any specific state-management library (it extends
+`ChangeNotifier`).
 
 ## Features
 
-- Offset-пагинация через `ACDefaultListLoadingDispatcher` и
+- Offset pagination via `ACDefaultListLoadingDispatcher` and
   `ACOffsetListLoadingParamsMixin`.
-- Cursor-пагинация через `ACCursorListLoadingParamsMixin` и любой DTO с
-  миксином `ACListLoadingResult`.
-- DTO-ответы с явным `hasMore` через `ACCustomListLoadingDispatcher` +
+- Cursor pagination via `ACCursorListLoadingParamsMixin` and any DTO with
+  the `ACListLoadingResult` mixin.
+- DTO responses with explicit `hasMore` via `ACCustomListLoadingDispatcher` +
   `ACResultListLoadingParser`.
-- Поиск с debounce и `minLength` через `ACDebouncedSearchStrategy`.
-- Стратегии отмены: контракт `ACCancelStrategy` и готовая реализация
-  `ACOperationCancelStrategy` поверх `package:async`.
-- Интеграция с `ChangeNotifier` — подписка через `ListenableBuilder`,
-  `AnimatedBuilder` или `addListener`.
-- Переиспользуемые парсеры: `ACListLoadingParser`, `ACDefaultListLoadingParser`,
+- Debounced search with `minLength` via `ACDebouncedSearchStrategy`.
+- Cancellation strategies: the `ACCancelStrategy` contract and a ready
+  `ACOperationCancelStrategy` implementation on top of `package:async`.
+- Integration with `ChangeNotifier` — subscribe via `ListenableBuilder`,
+  `AnimatedBuilder` or `addListener`.
+- Reusable parsers: `ACListLoadingParser`, `ACDefaultListLoadingParser`,
   `ACResultListLoadingParser`.
 
 ## Installation
@@ -36,10 +36,11 @@ flutter pub add appcraft_list_loading_flutter
 
 ## Usage
 
-### 1. Базовый — `ACDefaultListLoadingDispatcher`
+### 1. Basic — `ACDefaultListLoadingDispatcher`
 
-Простейший сценарий: loader возвращает голый `List<T>`, offset-пагинация,
-без поиска. `hasMore` вычисляется парсером по `result.length >= params.limit`.
+The simplest scenario: the loader returns a plain `List<T>`, offset-based
+pagination, no search. `hasMore` is computed by the parser as
+`result.length >= params.limit`.
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
@@ -63,18 +64,18 @@ await dispatcher.reload(
   load: (p) => api.fetchUsers(offset: p.offset, limit: p.limit),
 );
 
-// Подгрузить следующую страницу:
+// Load the next page:
 await dispatcher.loadMore(
   params: UserListParams(offset: dispatcher.items.length, limit: 20),
   load: (p) => api.fetchUsers(offset: p.offset, limit: p.limit),
 );
 ```
 
-### 2. DTO с `ACListLoadingResult` — `ACCustomListLoadingDispatcher`
+### 2. DTO with `ACListLoadingResult` — `ACCustomListLoadingDispatcher`
 
-Если бекенд возвращает DTO с явным флагом `hasMore` (или cursor) — DTO
-подмешивает миксин `ACListLoadingResult<T>`, а диспатчер сам вытащит
-`items` и `hasMore`.
+If the backend returns a DTO with an explicit `hasMore` flag (or cursor),
+the DTO mixes in `ACListLoadingResult<T>` and the dispatcher will read
+`items` and `hasMore` from it automatically.
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
@@ -110,11 +111,11 @@ await dispatcher.reload(
 );
 ```
 
-### 3. Поиск с debounce — `ACDebouncedSearchStrategy`
+### 3. Debounced search — `ACDebouncedSearchStrategy`
 
-Стратегия поиска применяется только в `reload`: для query короче `minLength`
-items очищаются, для изменившегося query загрузка стартует через `debounce`.
-В `loadMore` поиск игнорируется.
+The search strategy applies only in `reload`: for a query shorter than
+`minLength` items are cleared, for a changed query loading starts after
+`debounce`. In `loadMore` the search strategy is ignored.
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
@@ -126,8 +127,8 @@ final dispatcher = ACDefaultListLoadingDispatcher<UserListParams, User>(
   ),
 );
 
-// Каждое изменение текста переотправляет reload — стратегия сама
-// схлопнет частые вызовы в один.
+// Every text change triggers a reload — the strategy will collapse
+// frequent calls into a single one.
 void onQueryChanged(String query) {
   dispatcher.reload(
     params: UserListParams(offset: 0, limit: 20, query: query),
@@ -136,11 +137,11 @@ void onQueryChanged(String query) {
 }
 ```
 
-### 4. Кастомная cancel strategy — `ACCancelStrategy`
+### 4. Custom cancel strategy — `ACCancelStrategy`
 
-Если нужна интеграция со собственной системой отмены (например, `Dio`
-`CancelToken`), реализуйте `ACCancelStrategy` и передайте экземпляр в
-`reload` / `loadMore` через параметр `cancelStrategy`.
+If you need to integrate with your own cancellation system (for example a
+`Dio` `CancelToken`), implement `ACCancelStrategy` and pass an instance to
+`reload` / `loadMore` via the `cancelStrategy` parameter.
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
@@ -184,39 +185,39 @@ await dispatcher.reload(
 
 ## API Reference
 
-- `ACListLoadingDispatcher<P, R, T>` — основной диспатчер с методами
-  `reload`, `loadMore`, `cancel`, `dispose`.
-- `ACDefaultListLoadingDispatcher<P, T>` — фасад для offset-пагинации с
-  «голым» `List<T>`-ответом.
-- `ACCustomListLoadingDispatcher<P, R, T>` — фасад для DTO с миксином
+- `ACListLoadingDispatcher<P, R, T>` — the core dispatcher with `reload`,
+  `loadMore`, `cancel` and `dispose` methods.
+- `ACDefaultListLoadingDispatcher<P, T>` — facade for offset pagination
+  with a plain `List<T>` response.
+- `ACCustomListLoadingDispatcher<P, R, T>` — facade for DTOs that mix in
   `ACListLoadingResult`.
-- `ACListLoadingParser<P, R, T>` — strategy-интерфейс парсинга
-  результата loader'а.
-- `ACDefaultListLoadingParser<P, T>` — реализация парсера для `List<T>`.
-- `ACResultListLoadingParser<P, R, T>` — реализация парсера для DTO с
-  `ACListLoadingResult`.
-- `ACListLoadingResult<T>` — миксин-контракт DTO (`items`, `hasMore`).
-- `ACListLoadingParamsMixin` — базовый миксин параметров (`limit`, `query`).
-- `ACOffsetListLoadingParamsMixin` — миксин offset-пагинации (`offset`).
-- `ACCursorListLoadingParamsMixin` — миксин cursor-пагинации (`cursor`).
-- `ACSearchStrategy` — контракт стратегии поиска (`schedule`, `cancel`,
+- `ACListLoadingParser<P, R, T>` — strategy interface for parsing the
+  loader result.
+- `ACDefaultListLoadingParser<P, T>` — parser implementation for `List<T>`.
+- `ACResultListLoadingParser<P, R, T>` — parser implementation for DTOs
+  with `ACListLoadingResult`.
+- `ACListLoadingResult<T>` — DTO contract mixin (`items`, `hasMore`).
+- `ACListLoadingParamsMixin` — base parameters mixin (`limit`, `query`).
+- `ACOffsetListLoadingParamsMixin` — offset pagination mixin (`offset`).
+- `ACCursorListLoadingParamsMixin` — cursor pagination mixin (`cursor`).
+- `ACSearchStrategy` — search strategy contract (`schedule`, `cancel`,
   `dispose`).
-- `ACDebouncedSearchStrategy` — реализация стратегии поиска с debounce и
-  `minLength`.
-- `ACCancelStrategy` — контракт стратегии отмены (`run`, `cancel`,
+- `ACDebouncedSearchStrategy` — search strategy implementation with
+  debounce and `minLength`.
+- `ACCancelStrategy` — cancellation strategy contract (`run`, `cancel`,
   `isActive`).
-- `ACOperationCancelStrategy` — реализация отмены поверх
-  `CancelableOperation` из `package:async`.
+- `ACOperationCancelStrategy` — cancellation implementation on top of
+  `CancelableOperation` from `package:async`.
 
-Подробная документация — в dartdoc на pub.dev.
+Detailed documentation is available in the dartdoc on pub.dev.
 
 ## Example
 
-Полный рабочий пример использования — в папке [`example/`](./example).
-Демонстрирует offset-пагинацию, поиск с debounce, pull-to-refresh и
-infinite scroll в одном экране.
+A complete working example is available in the [`example/`](./example)
+folder. It demonstrates offset pagination, debounced search,
+pull-to-refresh and infinite scroll on a single screen.
 
-Запуск:
+To run it:
 
 ```bash
 cd example
@@ -226,4 +227,4 @@ flutter run
 
 ## License
 
-MIT — см. [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE).

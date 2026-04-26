@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 void main() => runApp(const MaterialApp(home: HomeScreen()));
 
-/// Демонстрационный экран: offset-пагинация + поиск с debounce +
+/// Demo screen: offset pagination + debounced search +
 /// pull-to-refresh + infinite scroll.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

@@ -6,62 +6,66 @@ import 'ac_list_loading_parser.dart';
 import 'ac_list_loading_result.dart';
 import 'ac_search_strategy.dart';
 
-/// Диспатчер загрузки списков с пагинацией и поиском.
+/// Dispatcher for list loading with pagination and search.
 ///
-/// Инкапсулирует жизненный цикл загрузок: `reload` перезапускает список с
-/// нуля, `loadMore` догружает следующую страницу, `cancel` снимает активную
-/// загрузку без сброса накопленных элементов, `dispose` освобождает ресурсы.
+/// Encapsulates the loading lifecycle: `reload` restarts the list from
+/// scratch, `loadMore` appends the next page, `cancel` aborts the active
+/// load without dropping the accumulated items, `dispose` releases
+/// resources.
 ///
-/// Диспатчер наследуется от [ChangeNotifier]. Состояние доступно через
-/// геттеры [items], [isLoading], [hasMore]; [notifyListeners] вызывается
-/// только при **изменении [items]** — подписчики `ChangeNotifier` перечитают
-/// `items` и сами обновят UI. Изменения [isLoading] или [hasMore] без
-/// изменения [items] нотификацию не вызывают; если потребителю нужен
-/// спиннер — состояние [isLoading] можно прочитать синхронно до/после
-/// `reload`/`loadMore` (например, оборачивая вызов в `setState`).
+/// The dispatcher extends [ChangeNotifier]. State is exposed via the
+/// [items], [isLoading] and [hasMore] getters; [notifyListeners] is
+/// invoked only when **[items] change** — `ChangeNotifier` subscribers
+/// re-read `items` and update the UI on their own. Changes to
+/// [isLoading] or [hasMore] without a change in [items] do not trigger
+/// a notification; if a consumer needs a spinner, [isLoading] can be
+/// read synchronously before/after `reload`/`loadMore` (for example by
+/// wrapping the call in `setState`).
 ///
-/// Generic-параметры:
-/// - [P] — тип параметров загрузки, подмешавший [ACListLoadingParamsMixin]
-///   (а также, обычно, один из offset/cursor-миксинов);
-/// - [R] — тип результата loader'а. Может быть «голым» `List<T>` или любым
-///   DTO — извлечение элементов и `hasMore` инкапсулировано в [parser];
-/// - [T] — тип элемента списка.
+/// Generic parameters:
+/// - [P] — the loading parameters type that mixes in
+///   [ACListLoadingParamsMixin] (and, usually, one of the offset/cursor
+///   mixins);
+/// - [R] — the loader's result type. May be a plain `List<T>` or any
+///   DTO — extracting items and `hasMore` is encapsulated in [parser];
+/// - [T] — the list element type.
 ///
-/// Для типовых сценариев удобнее использовать готовые fassade-подклассы:
-/// [ACDefaultListLoadingDispatcher] (loader возвращает `List<T>`) и
-/// [ACCustomListLoadingDispatcher] (loader возвращает DTO, подмешавший
-/// [ACListLoadingResult]).
+/// For typical scenarios the ready facade subclasses are more
+/// convenient: [ACDefaultListLoadingDispatcher] (the loader returns
+/// `List<T>`) and [ACCustomListLoadingDispatcher] (the loader returns
+/// a DTO that mixes in [ACListLoadingResult]).
 ///
-/// Поведение поиска настраивается через [searchStrategy] и применяется
-/// только в [reload]: debounce для изменившегося query, отказ при
-/// недостижении `minLength` (с очисткой items), мгновенный запуск при
-/// пустом или совпавшем query. В [loadMore] поиск игнорируется: query
-/// из params передаётся в loader как есть, debounce и проверка minLength
-/// не применяются.
+/// Search behaviour is configured via [searchStrategy] and applies only
+/// in [reload]: debounce for a changed query, rejection when `minLength`
+/// is not met (with items cleared), immediate launch for an empty or
+/// matching query. In [loadMore] the search strategy is ignored: the
+/// query from params is passed to the loader as-is, debounce and the
+/// minLength check are not applied.
 ///
-/// Ошибки loader'а **не** перехватываются: исключение, брошенное внутри
-/// `load(params)`, пробрасывается наружу из [reload]/[loadMore]. Флаг
-/// [isLoading] при этом гарантированно сбрасывается (через `try/finally`).
+/// Loader errors are **not** caught: an exception thrown inside
+/// `load(params)` propagates out of [reload]/[loadMore]. The
+/// [isLoading] flag is guaranteed to be reset (via `try/finally`).
 class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
     extends ChangeNotifier {
-  /// Создаёт диспатчер с обязательным [parser] и опциональной
+  /// Creates a dispatcher with the required [parser] and an optional
   /// [searchStrategy].
   ///
-  /// [parser] используется в каждом завершённом loader-вызове для
-  /// извлечения элементов и флага `hasMore` из результата.
+  /// [parser] is used on every completed loader call to extract items
+  /// and the `hasMore` flag from the result.
   ///
-  /// Если [searchStrategy] не передан — используется
-  /// [ACDebouncedSearchStrategy] с дефолтами (debounce `300мс`,
-  /// `minLength = 3`). Стратегия задаётся один раз и далее не меняется.
+  /// If [searchStrategy] is not provided, an
+  /// [ACDebouncedSearchStrategy] with defaults is used (debounce
+  /// `300ms`, `minLength = 3`). The strategy is set once and does not
+  /// change afterwards.
   ACListLoadingDispatcher({
     required this.parser,
     ACSearchStrategy? searchStrategy,
   }) : searchStrategy = searchStrategy ?? ACDebouncedSearchStrategy();
 
-  /// Стратегия извлечения элементов и `hasMore` из результата loader'а.
+  /// Strategy for extracting items and `hasMore` from the loader result.
   final ACListLoadingParser<P, R, T> parser;
 
-  /// Стратегия поискового поведения, применяемая в [reload].
+  /// Search behaviour strategy applied in [reload].
   final ACSearchStrategy searchStrategy;
 
   final List<T> _items = <T>[];
@@ -70,54 +74,56 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
   bool _disposed = false;
   ACCancelStrategy? _activeCancel;
 
-  /// Неизменяемый список накопленных элементов.
+  /// Unmodifiable view of the accumulated items.
   ///
-  /// Возвращается через `List.unmodifiable` — попытка мутировать снаружи
-  /// вызывает `UnsupportedError`.
+  /// Returned via `List.unmodifiable` — attempting to mutate it from
+  /// the outside throws `UnsupportedError`.
   List<T> get items => List<T>.unmodifiable(_items);
 
-  /// Идёт ли сейчас загрузка.
+  /// Whether a load is currently in progress.
   ///
-  /// Читается синхронно; [notifyListeners] при изменении этого флага
-  /// **не** вызывается. Если нужен реактивный спиннер — оборачивайте
-  /// вызов `reload`/`loadMore` в `setState`/аналог.
+  /// Read synchronously; [notifyListeners] is **not** invoked when this
+  /// flag changes. If a reactive spinner is needed, wrap the
+  /// `reload`/`loadMore` call in `setState` or its equivalent.
   bool get isLoading => _isLoading;
 
-  /// Есть ли ещё элементы для догрузки через [loadMore].
+  /// Whether there are more items to load via [loadMore].
   ///
-  /// Читается синхронно; [notifyListeners] при изменении этого флага
-  /// **без** изменения [items] не вызывается.
+  /// Read synchronously; [notifyListeners] is **not** invoked when this
+  /// flag changes without a change in [items].
   bool get hasMore => _hasMore;
 
-  /// Перезагрузить список.
+  /// Reloads the list.
   ///
-  /// Поведение определяется [searchStrategy]. Стратегия получает
-  /// `params.query` и возвращает:
-  /// - `null` — отказ по `minLength`: items очищаются, `hasMore = false`,
-  ///   loader **не** вызывается. [notifyListeners] вызывается только если
-  ///   список был непустым (то есть [items] действительно изменились);
-  /// - `Future<void>` — загрузку нужно стартовать по её завершению
-  ///   (мгновенно или после debounce). По резолву `Future` диспатчер
-  ///   запускает loader, заменяет накопленные элементы результатом и
-  ///   вызывает [notifyListeners].
+  /// Behaviour is determined by [searchStrategy]. The strategy receives
+  /// `params.query` and returns:
+  /// - `null` — rejection by `minLength`: items are cleared,
+  ///   `hasMore = false`, the loader is **not** called.
+  ///   [notifyListeners] is invoked only if the list was non-empty
+  ///   (i.e. [items] actually changed);
+  /// - `Future<void>` — the load should be started when it resolves
+  ///   (immediately or after a debounce). On resolve the dispatcher
+  ///   runs the loader, replaces the accumulated items with the result
+  ///   and invokes [notifyListeners].
   ///
-  /// Активная загрузка отменяется перед стартом новой через ранее
-  /// сохранённый [ACCancelStrategy].
+  /// Any active load is cancelled before a new one starts via the
+  /// previously stored [ACCancelStrategy].
   ///
-  /// [load] вызывается с переданными [params]. Тип результата [R]
-  /// определяется generic-ом диспатчера; извлечение элементов и
-  /// `hasMore` выполняется через [parser]. Исключения loader'а/parser'а
-  /// **пробрасываются наружу**; флаг [isLoading] при этом сбрасывается
-  /// до того, как исключение покинет метод.
+  /// [load] is called with the provided [params]. The result type [R]
+  /// is determined by the dispatcher's generic; extraction of items and
+  /// `hasMore` is performed by [parser]. Loader/parser exceptions are
+  /// **propagated outside**; the [isLoading] flag is reset before the
+  /// exception leaves the method.
   ///
-  /// Результат, пришедший после [dispose] или после того, как успели
-  /// стартовать более новый [reload], игнорируется (не применяется к
-  /// состоянию и не нотифицирует).
+  /// A result that arrives after [dispose], or after a newer [reload]
+  /// has already started, is ignored (it is not applied to the state
+  /// and does not notify).
   ///
-  /// [cancelStrategy] — опциональная стратегия отмены именно для этой
-  /// загрузки. Приоритет: аргумент → новый [ACOperationCancelStrategy]
-  /// на каждый вызов. В ветке отказа по minLength [cancelStrategy] не
-  /// используется: загрузка не стартует.
+  /// [cancelStrategy] — an optional cancellation strategy specifically
+  /// for this load. Priority: argument -> a new
+  /// [ACOperationCancelStrategy] for each call. In the minLength
+  /// rejection branch [cancelStrategy] is not used: the load does not
+  /// start.
   Future<void> reload({
     required P params,
     required Future<R> Function(P params) load,
@@ -125,14 +131,14 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
   }) async {
     if (_disposed) return;
 
-    // Выставляем флаг загрузки СИНХРОННО, чтобы вызывающий код сразу после
-    // `dispatcher.reload(...)` увидел `isLoading == true` без ожидания
-    // debounce-а или внутренних await-ов.
+    // Set the loading flag SYNCHRONOUSLY so that code that runs right
+    // after `dispatcher.reload(...)` immediately sees `isLoading == true`
+    // without waiting for the debounce or any internal awaits.
     _isLoading = true;
 
     final schedule = searchStrategy.schedule(params.query);
     if (schedule == null) {
-      // Отказ по minLength — очищаем items.
+      // Rejection by minLength — clear items.
       final previousCancel = _activeCancel;
       _activeCancel = null;
       if (previousCancel != null) {
@@ -159,28 +165,29 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
     );
   }
 
-  /// Догрузить следующую страницу.
+  /// Loads the next page.
   ///
-  /// Игнорируется (без ошибки, без изменения состояния), если:
-  /// - уже идёт другая загрузка (`isLoading == true`);
+  /// Ignored (without an error and without changing state) if:
+  /// - another load is already in progress (`isLoading == true`);
   /// - [hasMore] == `false`;
-  /// - диспатчер уже `dispose`-нут.
+  /// - the dispatcher has already been `dispose`-d.
   ///
-  /// Поиск в [loadMore] не применяется: [searchStrategy] не вызывается,
-  /// debounce отсутствует, проверка minLength пропускается. Query из
-  /// [params] передаётся в [load] как есть.
+  /// The search strategy is not applied in [loadMore]:
+  /// [searchStrategy] is not invoked, there is no debounce and the
+  /// minLength check is skipped. The query from [params] is passed to
+  /// [load] as-is.
   ///
-  /// Элементы, извлечённые через [parser], **добавляются** в конец
-  /// существующего списка; [hasMore] обновляется по результату parser'а.
-  /// По успешной догрузке вызывается [notifyListeners].
+  /// Items extracted by [parser] are **appended** to the end of the
+  /// existing list; [hasMore] is updated from the parser result. On a
+  /// successful load [notifyListeners] is invoked.
   ///
-  /// Исключения loader'а/parser'а **пробрасываются наружу**; флаг
-  /// [isLoading] при этом сбрасывается до того, как исключение покинет
-  /// метод. Накопленные элементы не мутируются в случае ошибки.
+  /// Loader/parser exceptions are **propagated outside**; the
+  /// [isLoading] flag is reset before the exception leaves the method.
+  /// Accumulated items are not mutated on error.
   ///
-  /// [cancelStrategy] — опциональная стратегия отмены именно для этой
-  /// загрузки. Приоритет: аргумент → новый [ACOperationCancelStrategy]
-  /// на каждый вызов.
+  /// [cancelStrategy] — an optional cancellation strategy specifically
+  /// for this load. Priority: argument -> a new
+  /// [ACOperationCancelStrategy] for each call.
   Future<void> loadMore({
     required P params,
     required Future<R> Function(P params) load,
@@ -198,12 +205,13 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
     );
   }
 
-  /// Отменить активную загрузку (включая pending-таймер в [searchStrategy]).
+  /// Cancels the active load (including the pending timer in
+  /// [searchStrategy]).
   ///
-  /// Не сбрасывает накопленные [items] и флаг [hasMore]. Если никакой
-  /// загрузки не идёт — безопасный no-op. После [dispose] также безопасен
-  /// (ничего не делает). [notifyListeners] не вызывается, так как [items]
-  /// не меняются.
+  /// Does not reset the accumulated [items] or the [hasMore] flag. If
+  /// no load is in progress, this is a safe no-op. After [dispose] it
+  /// is also safe (does nothing). [notifyListeners] is not invoked
+  /// because [items] do not change.
   Future<void> cancel() async {
     if (_disposed) return;
 
@@ -217,13 +225,13 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
     _isLoading = false;
   }
 
-  /// Освободить ресурсы.
+  /// Releases resources.
   ///
-  /// Отменяет активную загрузку и pending-таймер [searchStrategy] (ошибки
-  /// отмены игнорируются), освобождает ресурсы стратегии поиска и
-  /// помечает диспатчер как освобождённый. Повторный [dispose] —
-  /// идемпотентный no-op. Любые публичные методы, вызванные после
-  /// [dispose], становятся no-op и не мутируют состояние.
+  /// Cancels the active load and the [searchStrategy] pending timer
+  /// (cancellation errors are ignored), releases the search strategy's
+  /// resources and marks the dispatcher as disposed. A repeated
+  /// [dispose] is an idempotent no-op. Any public methods called after
+  /// [dispose] become no-ops and do not mutate state.
   @override
   void dispose() {
     if (_disposed) return;
@@ -231,31 +239,31 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
 
     searchStrategy.dispose();
 
-    // Отмена активной загрузки — fire-and-forget: ошибки игнорируются,
-    // приоритет освобождения ресурсов.
+    // Cancel the active load fire-and-forget: errors are ignored,
+    // releasing resources takes priority.
     final previousCancel = _activeCancel;
     _activeCancel = null;
     if (previousCancel != null) {
-      // Не await-им: dispose ChangeNotifier синхронный. Результат cancel
-      // уже никому не нужен.
+      // Don't await: ChangeNotifier.dispose is synchronous. The result
+      // of cancel is no longer needed by anyone.
       previousCancel.cancel().ignore();
     }
 
     super.dispose();
   }
 
-  /// Общая процедура выполнения загрузки для [reload] и [loadMore].
+  /// Common loading routine for [reload] and [loadMore].
   ///
-  /// При `replace == true` накопленные элементы заменяются результатом
-  /// loader'а; при `replace == false` — добавляются в конец (loadMore).
+  /// When `replace == true` the accumulated items are replaced with the
+  /// loader result; when `replace == false` they are appended (loadMore).
   ///
-  /// [cancelStrategy] выбирается по приоритету: аргумент → новый
-  /// [ACOperationCancelStrategy]. Выбранный экземпляр сохраняется в
-  /// `_activeCancel`, чтобы следующий [reload] мог его отменить.
+  /// [cancelStrategy] is selected by priority: argument -> a new
+  /// [ACOperationCancelStrategy]. The selected instance is stored in
+  /// `_activeCancel` so that the next [reload] can cancel it.
   ///
-  /// Извлечение элементов и `hasMore` делегируется в [parser]. Исключения
-  /// loader'а/parser'а не перехватываются: `try/finally` гарантирует
-  /// сброс [_isLoading] до пробрасывания исключения наружу.
+  /// Extraction of items and `hasMore` is delegated to [parser].
+  /// Loader/parser exceptions are not caught: `try/finally` guarantees
+  /// that [_isLoading] is reset before the exception is propagated.
   Future<void> _runLoad({
     required P params,
     required Future<R> Function(P params) load,
@@ -279,7 +287,7 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
     try {
       final result = await capturedCancel.run<R>(load(params));
       if (_disposed || !identical(_activeCancel, capturedCancel)) return;
-      if (result == null) return; // отменено
+      if (result == null) return; // cancelled
 
       final newItems = parser.extractItems(params, result);
       final newHasMore = parser.hasMore(params, result);
@@ -301,12 +309,14 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
   }
 }
 
-/// Fassade-диспатчер для offset-пагинации с «голым» `List<T>`-ответом.
+/// Facade dispatcher for offset pagination with a plain `List<T>`
+/// response.
 ///
-/// Использует [ACDefaultListLoadingParser] — элементы берутся напрямую из
-/// результата, `hasMore` вычисляется как `result.length >= params.limit`.
+/// Uses [ACDefaultListLoadingParser] — items are taken directly from
+/// the result, `hasMore` is computed as
+/// `result.length >= params.limit`.
 ///
-/// Пример:
+/// Example:
 ///
 /// ```dart
 /// final dispatcher = ACDefaultListLoadingDispatcher<UserListParams, User>();
@@ -318,8 +328,8 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
 final class ACDefaultListLoadingDispatcher<
         P extends ACOffsetListLoadingParamsMixin, T>
     extends ACListLoadingDispatcher<P, List<T>, T> {
-  /// Создаёт диспатчер с [ACDefaultListLoadingParser] и опциональной
-  /// [searchStrategy].
+  /// Creates a dispatcher with [ACDefaultListLoadingParser] and an
+  /// optional [searchStrategy].
   ACDefaultListLoadingDispatcher({
     super.searchStrategy,
   }) : super(
@@ -327,12 +337,12 @@ final class ACDefaultListLoadingDispatcher<
         );
 }
 
-/// Fassade-диспатчер для DTO, подмешавших [ACListLoadingResult].
+/// Facade dispatcher for DTOs that mix in [ACListLoadingResult].
 ///
-/// Использует [ACResultListLoadingParser] — элементы и `hasMore` берутся
-/// из соответствующих геттеров результата.
+/// Uses [ACResultListLoadingParser] — items and `hasMore` are taken
+/// from the corresponding getters on the result.
 ///
-/// Пример:
+/// Example:
 ///
 /// ```dart
 /// final dispatcher =
@@ -346,8 +356,8 @@ final class ACCustomListLoadingDispatcher<
         P extends ACListLoadingParamsMixin,
         R extends ACListLoadingResult<T>,
         T> extends ACListLoadingDispatcher<P, R, T> {
-  /// Создаёт диспатчер с [ACResultListLoadingParser] и опциональной
-  /// [searchStrategy].
+  /// Creates a dispatcher with [ACResultListLoadingParser] and an
+  /// optional [searchStrategy].
   ACCustomListLoadingDispatcher({
     super.searchStrategy,
   }) : super(

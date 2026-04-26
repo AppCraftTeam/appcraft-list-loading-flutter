@@ -1,31 +1,31 @@
 # appcraft_list_loading_flutter
 
 <!--
-Шаблон для будущих версий CHANGELOG.md:
+Template for future CHANGELOG.md entries:
 ## <version>
 
-- Краткое описание изменений (императивный стиль, настоящее время).
-- Список ключевых изменений:
-  - Что добавлено.
-  - Что изменено.
-  - Что исправлено.
-  - Что удалено или устарело.
-- Каждое изменение — отдельный пункт, без лишних деталей реализации.
+- Brief summary of changes (imperative mood, present tense).
+- List of key changes:
+  - What was added.
+  - What was changed.
+  - What was fixed.
+  - What was removed or deprecated.
+- Each change is a separate bullet, without unnecessary implementation details.
 -->
 
 ## 0.0.1
 
-- Первый релиз пакета.
-- Добавлен `ACListLoadingDispatcher<P, R, T>` — диспатчер пагинированной
-  загрузки списков с поддержкой offset/cursor пагинации, поиска и отмены.
-- Добавлены fassade-диспатчеры `ACDefaultListLoadingDispatcher<P, T>` и
-  `ACCustomListLoadingDispatcher<P, R, T>` с преднастроенными парсерами.
-- Добавлены парсеры `ACListLoadingParser`, `ACDefaultListLoadingParser`,
+- Initial package release.
+- Added `ACListLoadingDispatcher<P, R, T>` — a dispatcher for paginated list
+  loading with support for offset/cursor pagination, search and cancellation.
+- Added facade dispatchers `ACDefaultListLoadingDispatcher<P, T>` and
+  `ACCustomListLoadingDispatcher<P, R, T>` with pre-configured parsers.
+- Added parsers `ACListLoadingParser`, `ACDefaultListLoadingParser`,
   `ACResultListLoadingParser`.
-- Добавлен миксин `ACListLoadingResult<T>` для DTO ответов.
-- Добавлены миксины параметров `ACListLoadingParamsMixin`,
+- Added `ACListLoadingResult<T>` mixin for response DTOs.
+- Added parameter mixins `ACListLoadingParamsMixin`,
   `ACOffsetListLoadingParamsMixin`, `ACCursorListLoadingParamsMixin`.
-- Добавлена стратегия поиска `ACSearchStrategy` с реализацией
+- Added search strategy `ACSearchStrategy` with implementation
   `ACDebouncedSearchStrategy` (debounce + minLength).
-- Добавлена стратегия отмены `ACCancelStrategy` (контракт +
-  реализация на `CancelableOperation`).
+- Added cancellation strategy `ACCancelStrategy` (contract +
+  implementation based on `CancelableOperation`).

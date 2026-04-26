@@ -1,38 +1,40 @@
-/// Базовый контракт параметров загрузки, принимаемых диспатчером списка.
+/// Base contract for loading parameters accepted by the list dispatcher.
 ///
-/// Пользовательский тип параметров (передаваемый в `reload` и `loadMore`) должен
-/// подмешать один из конкретных миксинов — [ACOffsetListLoadingParamsMixin] для
-/// offset-пагинации или [ACCursorListLoadingParamsMixin] для cursor-пагинации, —
-/// которые надстраиваются над этим базовым.
+/// A user-defined parameters type (passed to `reload` and `loadMore`) must
+/// mix in one of the concrete mixins — [ACOffsetListLoadingParamsMixin] for
+/// offset-based pagination or [ACCursorListLoadingParamsMixin] for
+/// cursor-based pagination — both built on top of this base mixin.
 ///
-/// Базовый миксин несёт два поля:
-/// - [limit] — информационное, диспатчер его не использует (оно нужно самому
-///   loader'у при формировании запроса);
-/// - [query] — читается диспатчером для `ACSearchStrategy` (debounce, minLength,
-///   сброс при пустом значении).
+/// The base mixin carries two fields:
+/// - [limit] — informational, not used by the dispatcher (it is meant for
+///   the loader itself when building a request);
+/// - [query] — read by the dispatcher for `ACSearchStrategy` (debounce,
+///   minLength, reset on empty value).
 ///
-/// Логики в миксине нет: это только декларация геттеров.
+/// The mixin contains no logic: it only declares getters.
 mixin ACListLoadingParamsMixin {
-  /// Максимальное количество элементов, которое loader должен вернуть.
+  /// Maximum number of items the loader is expected to return.
   ///
-  /// Информационное поле: диспатчер его не читает. Рекомендуется значение
-  /// `>= 0`; валидация остаётся на стороне потребителя.
+  /// Informational field: the dispatcher does not read it. A value `>= 0`
+  /// is recommended; validation is up to the consumer.
   int? get limit;
 
-  /// Поисковый запрос; основа поведения `ACSearchStrategy`.
+  /// Search query; the basis for `ACSearchStrategy` behaviour.
   ///
-  /// Диспатчер трактует `null` и пустую строку эквивалентно — как отсутствие
-  /// поиска. Обрезка пробелов (trim) — ответственность потребителя.
+  /// The dispatcher treats `null` and an empty string equivalently — as
+  /// the absence of a search query. Trimming whitespace is the
+  /// consumer's responsibility.
   String? get query;
 }
 
-/// Параметры offset-пагинации.
+/// Offset pagination parameters.
 ///
-/// Надстраивается над [ACListLoadingParamsMixin], добавляя поле [offset] —
-/// смещение первой запрашиваемой записи. Диспатчер поле не читает; оно
-/// предназначено для loader'а при формировании запроса к источнику.
+/// Built on top of [ACListLoadingParamsMixin] by adding the [offset]
+/// field — the offset of the first requested record. The dispatcher does
+/// not read this field; it is intended for the loader when building a
+/// request to the data source.
 ///
-/// Типичное использование:
+/// Typical usage:
 ///
 /// ```dart
 /// final class UserListParams
@@ -48,21 +50,22 @@ mixin ACListLoadingParamsMixin {
 /// }
 /// ```
 mixin ACOffsetListLoadingParamsMixin on ACListLoadingParamsMixin {
-  /// Смещение (offset) для offset-based пагинации.
+  /// Offset for offset-based pagination.
   ///
-  /// Информационное поле: диспатчер его не читает. Рекомендуется значение
-  /// `>= 0`; валидация остаётся на стороне потребителя.
+  /// Informational field: the dispatcher does not read it. A value `>= 0`
+  /// is recommended; validation is up to the consumer.
   int? get offset;
 }
 
-/// Параметры cursor-пагинации.
+/// Cursor pagination parameters.
 ///
-/// Надстраивается над [ACListLoadingParamsMixin], добавляя поле [cursor] —
-/// непрозрачный идентификатор следующей страницы, возвращаемый источником
-/// данных в ответе. Диспатчер поле не читает; хранение актуального cursor
-/// между вызовами `reload`/`loadMore` — ответственность потребителя.
+/// Built on top of [ACListLoadingParamsMixin] by adding the [cursor]
+/// field — an opaque identifier of the next page returned by the data
+/// source in its response. The dispatcher does not read this field;
+/// keeping the current cursor between `reload`/`loadMore` calls is the
+/// consumer's responsibility.
 ///
-/// Типичное использование:
+/// Typical usage:
 ///
 /// ```dart
 /// final class UserCursorParams
@@ -78,9 +81,9 @@ mixin ACOffsetListLoadingParamsMixin on ACListLoadingParamsMixin {
 /// }
 /// ```
 mixin ACCursorListLoadingParamsMixin on ACListLoadingParamsMixin {
-  /// Непрозрачный cursor следующей страницы (или `null` перед первой
-  /// загрузкой / на последней странице).
+  /// Opaque cursor of the next page (or `null` before the first load /
+  /// on the last page).
   ///
-  /// Информационное поле: диспатчер его не читает.
+  /// Informational field: the dispatcher does not read it.
   String? get cursor;
 }

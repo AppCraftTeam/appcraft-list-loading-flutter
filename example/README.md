@@ -1,12 +1,12 @@
 # appcraft_list_loading_flutter_example
 
-Минимальное Flutter-приложение, демонстрирующее ключевые возможности пакета
-[`appcraft_list_loading_flutter`](../): offset-пагинацию через
-`ACDefaultListLoadingDispatcher`, поиск с debounce
-(`ACDebouncedSearchStrategy`), pull-to-refresh через `RefreshIndicator` и
-infinite scroll через `ScrollController` + `ListenableBuilder`.
+A minimal Flutter app demonstrating the key features of the
+[`appcraft_list_loading_flutter`](../) package: offset pagination via
+`ACDefaultListLoadingDispatcher`, debounced search
+(`ACDebouncedSearchStrategy`), pull-to-refresh via `RefreshIndicator` and
+infinite scroll via `ScrollController` + `ListenableBuilder`.
 
-## Запуск
+## Run
 
 ```bash
 flutter pub get
