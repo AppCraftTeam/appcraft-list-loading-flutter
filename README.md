@@ -183,6 +183,44 @@ await dispatcher.reload(
 );
 ```
 
+## Extending the API
+
+All public concrete classes in `appcraft_list_loading_flutter` are open for
+both `extends` and `implements`. This lets you customize loading, search,
+parsing or cancellation behavior without copying the source.
+
+Open classes:
+
+- `ACDefaultListLoadingDispatcher`
+- `ACCustomListLoadingDispatcher`
+- `ACDefaultListLoadingParser`
+- `ACResultListLoadingParser`
+- `ACDebouncedSearchStrategy`
+- `ACOperationCancelStrategy`
+
+(The abstract classes `ACListLoadingDispatcher`, `ACListLoadingParser`,
+`ACSearchStrategy`, `ACCancelStrategy` and the mixins were already open in
+prior versions.)
+
+### Example: extending the default dispatcher
+
+```dart
+class LoggingDispatcher<P extends ACOffsetListLoadingParamsMixin, T>
+    extends ACDefaultListLoadingDispatcher<P, T> {
+  LoggingDispatcher({super.searchStrategy});
+
+  @override
+  void notifyListeners() {
+    print('items: ${items.length}, isLoading: $isLoading');
+    super.notifyListeners();
+  }
+}
+```
+
+When extending, respect the parent contract documented in the corresponding
+class' API docs. In particular, `ACDefaultListLoadingDispatcher` extends
+`ChangeNotifier` — overrides of `dispose()` must call `super.dispose()`.
+
 ## API Reference
 
 - `ACListLoadingDispatcher<P, R, T>` — the core dispatcher with `reload`,

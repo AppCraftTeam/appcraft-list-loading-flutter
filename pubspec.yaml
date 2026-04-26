@@ -1,6 +1,6 @@
 name: appcraft_list_loading_flutter
 description: Dispatcher for paginated list loading with offset/cursor support, debounced search and pluggable cancellation strategies.
-version: 0.0.1
+version: 0.1.0
 repository: https://github.com/AppCraftTeam/appcraft-list-loading-flutter
 
 topics:

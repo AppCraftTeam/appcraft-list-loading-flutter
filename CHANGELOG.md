@@ -13,6 +13,18 @@ Template for future CHANGELOG.md entries:
 - Each change is a separate bullet, without unnecessary implementation details.
 -->
 
+## 0.1.0
+
+- **BREAKING CHANGE:** removed `final` modifier from public concrete classes,
+  allowing both `extends` and `implements` for downstream consumers. Affected
+  classes: `ACDefaultListLoadingDispatcher`, `ACCustomListLoadingDispatcher`,
+  `ACDefaultListLoadingParser`, `ACResultListLoadingParser`,
+  `ACDebouncedSearchStrategy`, `ACOperationCancelStrategy`. For consumers
+  that did not rely on `final` guarantees, this is a non-breaking relaxation;
+  no migration is required.
+- Added "Extending the API" section to README with subclassing example.
+- Added inheritance/implementation note to dartdoc of all open classes.
+
 ## 0.0.1
 
 - Initial package release.
