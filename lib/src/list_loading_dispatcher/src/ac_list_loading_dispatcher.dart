@@ -325,7 +325,12 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
 ///   load: (p) => api.fetchUsers(offset: p.offset, limit: p.limit),
 /// );
 /// ```
-final class ACDefaultListLoadingDispatcher<
+///
+/// **Extension point**: can be extended to customize loading behavior.
+/// Overrides of `notifyListeners`, `dispose`, or internal state mutation
+/// must respect the `ChangeNotifier` contract; `super.dispose()` is
+/// required.
+class ACDefaultListLoadingDispatcher<
         P extends ACOffsetListLoadingParamsMixin, T>
     extends ACListLoadingDispatcher<P, List<T>, T> {
   /// Creates a dispatcher with [ACDefaultListLoadingParser] and an
@@ -352,7 +357,12 @@ final class ACDefaultListLoadingDispatcher<
 ///   load: (p) => api.fetchUsers(cursor: p.cursor),
 /// );
 /// ```
-final class ACCustomListLoadingDispatcher<
+///
+/// **Extension point**: can be extended to customize loading behavior.
+/// Overrides of `notifyListeners`, `dispose`, or internal state mutation
+/// must respect the `ChangeNotifier` contract; `super.dispose()` is
+/// required.
+class ACCustomListLoadingDispatcher<
         P extends ACListLoadingParamsMixin,
         R extends ACListLoadingResult<T>,
         T> extends ACListLoadingDispatcher<P, R, T> {

@@ -46,7 +46,11 @@ abstract class ACCancelStrategy {
 /// (for example, an HTTP request will keep running on the server), it
 /// only cancels the wait for the result on the dispatcher's side. The
 /// result of the operation that finished in the background is ignored.
-final class ACOperationCancelStrategy implements ACCancelStrategy {
+///
+/// **Extension point**: can be extended or implemented. Subclasses must
+/// keep `cancel()` idempotent and `isActive` consistent with the
+/// run/cancel lifecycle (per `ACCancelStrategy` contract).
+class ACOperationCancelStrategy implements ACCancelStrategy {
   /// Creates a new strategy. The instance is single-use — one per load.
   ACOperationCancelStrategy();
 

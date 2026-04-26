@@ -41,7 +41,12 @@ abstract class ACSearchStrategy {
 ///     updated immediately and a completed `Future` is returned;
 ///   - otherwise a `Timer(debounce, ...)` is started; on its tick
 ///     `_lastAppliedQuery` is updated and the completer completes.
-final class ACDebouncedSearchStrategy implements ACSearchStrategy {
+///
+/// **Extension point**: can be extended to customize debounce/minLength
+/// behavior, or implemented for a custom `ACSearchStrategy`. Overrides
+/// of `schedule`/`cancel`/`dispose` must keep the strategy thread-safe
+/// within the dispatcher's single-thread context.
+class ACDebouncedSearchStrategy implements ACSearchStrategy {
   /// Creates a strategy with custom [debounce] and [minLength].
   ///
   /// Defaults: `debounce = 300ms`, `minLength = 3`. Both parameters

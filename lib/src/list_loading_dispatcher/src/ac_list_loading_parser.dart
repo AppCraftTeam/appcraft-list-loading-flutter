@@ -32,7 +32,11 @@ abstract class ACListLoadingParser<P extends ACListLoadingParamsMixin, R, T> {
 /// `hasMore` is computed as `result.length >= params.limit`. If
 /// [ACListLoadingParamsMixin.limit] is `null`, the source is assumed to
 /// have no limit and pages may continue indefinitely (`hasMore == true`).
-final class ACDefaultListLoadingParser<
+///
+/// **Extension point**: can be extended or implemented. Overrides of
+/// `extractItems` and `hasMore` must remain side-effect free and
+/// synchronous.
+class ACDefaultListLoadingParser<
     P extends ACOffsetListLoadingParamsMixin, T>
     implements ACListLoadingParser<P, List<T>, T> {
   /// Creates a parser. The instance can be declared as `const`.
@@ -53,7 +57,12 @@ final class ACDefaultListLoadingParser<
 ///
 /// Delegates both methods directly to the result getters: [extractItems]
 /// returns `result.items`, [hasMore] returns `result.hasMore`.
-final class ACResultListLoadingParser<
+///
+/// **Extension point**: can be extended or implemented. Overrides of
+/// `extractItems` and `hasMore` must remain side-effect free and
+/// synchronous, and continue to honor the [ACListLoadingResult] contract
+/// of the result type [R].
+class ACResultListLoadingParser<
     P extends ACListLoadingParamsMixin,
     R extends ACListLoadingResult<T>,
     T> implements ACListLoadingParser<P, R, T> {
