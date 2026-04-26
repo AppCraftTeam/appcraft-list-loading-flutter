@@ -1,9 +1,9 @@
 // ignore_for_file: cascade_invocations, unused_element_parameter, prefer_const_constructors
 import 'dart:async';
 
-import 'package:appcraft_list_loading_flutter/src/ac_list_loading_dispatcher.dart';
-import 'package:appcraft_list_loading_flutter/src/ac_list_loading_params.dart';
-import 'package:appcraft_list_loading_flutter/src/ac_list_loading_result.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_dispatcher.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_result.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 

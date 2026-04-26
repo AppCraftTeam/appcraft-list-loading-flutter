@@ -2,8 +2,8 @@
 import 'dart:async';
 
 import 'package:appcraft_list_loading_flutter/src/ac_cancel_strategy.dart';
-import 'package:appcraft_list_loading_flutter/src/ac_list_loading_dispatcher.dart';
-import 'package:appcraft_list_loading_flutter/src/ac_list_loading_params.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_dispatcher.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';

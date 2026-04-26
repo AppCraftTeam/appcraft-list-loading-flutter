@@ -1,5 +1,5 @@
-import 'ac_list_loading_params.dart';
-import 'ac_list_loading_result.dart';
+import 'ac_params.dart';
+import 'ac_result.dart';
 
 /// Strategy for extracting items and the `hasMore` flag from the loader
 /// result.

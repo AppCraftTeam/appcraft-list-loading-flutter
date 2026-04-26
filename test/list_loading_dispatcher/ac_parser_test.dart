@@ -1,7 +1,7 @@
 // ignore_for_file: prefer_const_constructors, unused_element_parameter
-import 'package:appcraft_list_loading_flutter/src/ac_list_loading_params.dart';
-import 'package:appcraft_list_loading_flutter/src/ac_list_loading_parser.dart';
-import 'package:appcraft_list_loading_flutter/src/ac_list_loading_result.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_parser.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_result.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Offset-based params used to exercise [ACDefaultParser].

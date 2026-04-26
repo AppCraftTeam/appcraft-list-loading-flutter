@@ -1,4 +1,4 @@
-import 'package:appcraft_list_loading_flutter/src/ac_list_loading_result.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_result.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Minimal DTO that mixes in [ACResult] — same shape users apply to

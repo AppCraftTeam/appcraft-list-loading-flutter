@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 import 'ac_cancel_strategy.dart';
-import 'ac_list_loading_params.dart';
-import 'ac_list_loading_parser.dart';
-import 'ac_list_loading_result.dart';
+import 'ac_params.dart';
+import 'ac_parser.dart';
+import 'ac_result.dart';
 import 'ac_search_strategy.dart';
 
 /// Dispatcher for list loading with pagination and search.
