@@ -1,5 +1,5 @@
 // ignore_for_file: prefer_const_constructors, cascade_invocations
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_search_strategy.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_search_strategy.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 

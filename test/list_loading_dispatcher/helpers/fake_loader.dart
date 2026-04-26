@@ -1,7 +1,7 @@
 import 'dart:async';
 
 /// A controllable fake of a `Future<R> Function(P params)` loader used by
-/// `ACListLoadingDispatcher` tests.
+/// `ACDispatcher` tests.
 ///
 /// Outcomes are configured via [enqueueValue] and [enqueueError] and consumed
 /// in FIFO order — the i-th call resolves with the i-th enqueued outcome.

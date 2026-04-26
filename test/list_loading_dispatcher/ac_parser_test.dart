@@ -1,12 +1,12 @@
 // ignore_for_file: prefer_const_constructors, unused_element_parameter
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_params.dart';
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_parser.dart';
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_result.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_parser.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_result.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Offset-based params used to exercise [ACDefaultListLoadingParser].
+/// Offset-based params used to exercise [ACDefaultParser].
 final class _OffsetParams
-    with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+    with ACParamsMixin, ACOffsetParamsMixin {
   const _OffsetParams({this.limit, this.offset, this.query});
 
   @override
@@ -17,9 +17,9 @@ final class _OffsetParams
   final String? query;
 }
 
-/// Base params used to exercise [ACResultListLoadingParser] (no pagination
+/// Base params used to exercise [ACResultParser] (no pagination
 /// fields needed — the parser delegates entirely to the result DTO).
-final class _BaseParams with ACListLoadingParamsMixin {
+final class _BaseParams with ACParamsMixin {
   const _BaseParams({this.limit, this.query});
 
   @override
@@ -28,8 +28,8 @@ final class _BaseParams with ACListLoadingParamsMixin {
   final String? query;
 }
 
-/// Tiny DTO that mixes in [ACListLoadingResult] — mirrors the consumer pattern.
-final class _TestPage<T> with ACListLoadingResult<T> {
+/// Tiny DTO that mixes in [ACResult] — mirrors the consumer pattern.
+final class _TestPage<T> with ACResult<T> {
   const _TestPage(this.items, {required this.hasMore});
 
   @override
@@ -39,10 +39,10 @@ final class _TestPage<T> with ACListLoadingResult<T> {
 }
 
 void main() {
-  group('ACDefaultListLoadingParser', () {
+  group('ACDefaultParser', () {
     test('extractItems returns the input list as-is', () {
       // Arrange
-      const parser = ACDefaultListLoadingParser<_OffsetParams, int>();
+      const parser = ACDefaultParser<_OffsetParams, int>();
       const params = _OffsetParams(limit: 10, offset: 0);
       final result = <int>[1, 2, 3];
 
@@ -57,7 +57,7 @@ void main() {
 
     test('extractItems returns an empty list as-is', () {
       // Arrange
-      const parser = ACDefaultListLoadingParser<_OffsetParams, int>();
+      const parser = ACDefaultParser<_OffsetParams, int>();
       const params = _OffsetParams(limit: 10);
       final result = <int>[];
 
@@ -71,7 +71,7 @@ void main() {
 
     test('hasMore: limit == null -> true regardless of result length', () {
       // Arrange
-      const parser = ACDefaultListLoadingParser<_OffsetParams, int>();
+      const parser = ACDefaultParser<_OffsetParams, int>();
       const params = _OffsetParams();
 
       // Act & Assert — empty page, nullable limit: still treat as "more".
@@ -81,7 +81,7 @@ void main() {
 
     test('hasMore: result.length < limit -> false (last page)', () {
       // Arrange
-      const parser = ACDefaultListLoadingParser<_OffsetParams, int>();
+      const parser = ACDefaultParser<_OffsetParams, int>();
       const params = _OffsetParams(limit: 10);
 
       // Act & Assert
@@ -91,7 +91,7 @@ void main() {
 
     test('hasMore: result.length == limit -> true (could be more)', () {
       // Arrange
-      const parser = ACDefaultListLoadingParser<_OffsetParams, int>();
+      const parser = ACDefaultParser<_OffsetParams, int>();
       const params = _OffsetParams(limit: 3);
 
       // Act
@@ -105,7 +105,7 @@ void main() {
     test('hasMore: result.length > limit -> true (defensive, page overfull)',
         () {
       // Arrange
-      const parser = ACDefaultListLoadingParser<_OffsetParams, int>();
+      const parser = ACDefaultParser<_OffsetParams, int>();
       const params = _OffsetParams(limit: 2);
 
       // Act
@@ -115,23 +115,23 @@ void main() {
       expect(hasMore, isTrue);
     });
 
-    test('implements ACListLoadingParser<P, List<T>, T>', () {
+    test('implements ACParser<P, List<T>, T>', () {
       // Arrange & Act
-      const parser = ACDefaultListLoadingParser<_OffsetParams, int>();
+      const parser = ACDefaultParser<_OffsetParams, int>();
 
       // Assert
       expect(
         parser,
-        isA<ACListLoadingParser<_OffsetParams, List<int>, int>>(),
+        isA<ACParser<_OffsetParams, List<int>, int>>(),
       );
     });
   });
 
-  group('ACResultListLoadingParser', () {
+  group('ACResultParser', () {
     test('extractItems delegates to result.items', () {
       // Arrange
       const parser =
-          ACResultListLoadingParser<_BaseParams, _TestPage<int>, int>();
+          ACResultParser<_BaseParams, _TestPage<int>, int>();
       const params = _BaseParams();
       const result = _TestPage<int>(<int>[10, 20, 30], hasMore: true);
 
@@ -146,7 +146,7 @@ void main() {
     test('extractItems on an empty page returns empty list', () {
       // Arrange
       const parser =
-          ACResultListLoadingParser<_BaseParams, _TestPage<int>, int>();
+          ACResultParser<_BaseParams, _TestPage<int>, int>();
       const params = _BaseParams();
       const result = _TestPage<int>(<int>[], hasMore: false);
 
@@ -157,7 +157,7 @@ void main() {
     test('hasMore delegates to result.hasMore (true)', () {
       // Arrange
       const parser =
-          ACResultListLoadingParser<_BaseParams, _TestPage<int>, int>();
+          ACResultParser<_BaseParams, _TestPage<int>, int>();
       const params = _BaseParams();
       const result = _TestPage<int>(<int>[1], hasMore: true);
 
@@ -168,7 +168,7 @@ void main() {
     test('hasMore delegates to result.hasMore (false)', () {
       // Arrange
       const parser =
-          ACResultListLoadingParser<_BaseParams, _TestPage<int>, int>();
+          ACResultParser<_BaseParams, _TestPage<int>, int>();
       const params = _BaseParams();
       const result = _TestPage<int>(<int>[1], hasMore: false);
 
@@ -176,15 +176,15 @@ void main() {
       expect(parser.hasMore(params, result), isFalse);
     });
 
-    test('implements ACListLoadingParser<P, R, T>', () {
+    test('implements ACParser<P, R, T>', () {
       // Arrange & Act
       const parser =
-          ACResultListLoadingParser<_BaseParams, _TestPage<int>, int>();
+          ACResultParser<_BaseParams, _TestPage<int>, int>();
 
       // Assert
       expect(
         parser,
-        isA<ACListLoadingParser<_BaseParams, _TestPage<int>, int>>(),
+        isA<ACParser<_BaseParams, _TestPage<int>, int>>(),
       );
     });
   });

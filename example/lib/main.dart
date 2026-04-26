@@ -16,14 +16,14 @@ class HomeScreenState extends State<HomeScreen> {
   static const int _pageSize = 20;
   static const int _scrollLoadMoreThreshold = 200;
 
-  late final ACDefaultListLoadingDispatcher<_DemoParams, String> _dispatcher;
+  late final ACDefaultDispatcher<_DemoParams, String> _dispatcher;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _dispatcher = ACDefaultListLoadingDispatcher<_DemoParams, String>(
+    _dispatcher = ACDefaultDispatcher<_DemoParams, String>(
       searchStrategy: ACDebouncedSearchStrategy(
         debounce: const Duration(milliseconds: 300),
         minLength: 2,
@@ -134,7 +134,7 @@ class HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _DemoParams with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+class _DemoParams with ACParamsMixin, ACOffsetParamsMixin {
   const _DemoParams({required this.limit, required this.offset, this.query});
 
   @override

@@ -3,7 +3,7 @@
 /// User response DTOs mix in this mixin and implement the two getters.
 /// The dispatcher reads [items] and [hasMore] directly — a separate
 /// parser callback is not required.
-mixin ACListLoadingResult<T> {
+mixin ACResult<T> {
   /// Items received on this page.
   List<T> get items;
 

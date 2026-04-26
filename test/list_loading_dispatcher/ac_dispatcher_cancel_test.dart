@@ -1,16 +1,16 @@
 // ignore_for_file: cascade_invocations, unused_element_parameter, prefer_const_constructors
 import 'dart:async';
 
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_cancel_strategy.dart';
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_dispatcher.dart';
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_params.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_cancel_strategy.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_dispatcher.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';
 
-/// Offset-based params used with [ACDefaultListLoadingDispatcher].
+/// Offset-based params used with [ACDefaultDispatcher].
 final class _TestParams
-    with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+    with ACParamsMixin, ACOffsetParamsMixin {
   const _TestParams({this.limit, this.offset, this.query});
 
   @override
@@ -51,11 +51,11 @@ final class _SpyCancelStrategy implements ACCancelStrategy {
   bool get isActive => _inner.isActive;
 }
 
-ACDefaultListLoadingDispatcher<_TestParams, int> _buildDispatcher() =>
-    ACDefaultListLoadingDispatcher<_TestParams, int>();
+ACDefaultDispatcher<_TestParams, int> _buildDispatcher() =>
+    ACDefaultDispatcher<_TestParams, int>();
 
 void main() {
-  group('ACListLoadingDispatcher — cancel strategy (US3, post-T047)', () {
+  group('ACDispatcher — cancel strategy (US3, post-T047)', () {
     test('reload with per-call cancelStrategy uses the supplied strategy',
         () async {
       // Arrange

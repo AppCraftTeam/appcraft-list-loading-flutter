@@ -1,19 +1,19 @@
 // ignore_for_file: cascade_invocations, unused_element_parameter, prefer_const_constructors
 import 'dart:async';
 
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_dispatcher.dart';
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_params.dart';
-import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_result.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_dispatcher.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_result.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';
 
-/// Offset-based params — used by the `ACDefaultListLoadingDispatcher` where
+/// Offset-based params — used by the `ACDefaultDispatcher` where
 /// the loader returns a bare `List<T>` and `hasMore` is computed from
 /// `params.limit`.
 final class _TestParams
-    with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+    with ACParamsMixin, ACOffsetParamsMixin {
   const _TestParams({this.limit, this.offset, this.query});
 
   @override
@@ -24,23 +24,26 @@ final class _TestParams
   final String? query;
 }
 
-/// Cursor-based params — used by the `ACCustomListLoadingDispatcher` where
-/// the loader returns a DTO that mixes [ACListLoadingResult].
-final class _TestCursorParams
-    with ACListLoadingParamsMixin, ACCursorListLoadingParamsMixin {
+/// Cursor-based params — used by the `ACCustomDispatcher` where
+/// the loader returns a DTO that mixes [ACResult].
+///
+/// Cursor pagination does not require a dedicated mixin: the dispatcher
+/// does not read the cursor field — it is purely informational for the
+/// loader. Declaring a plain `String? cursor` field on the params class
+/// is enough.
+final class _TestCursorParams with ACParamsMixin {
   const _TestCursorParams({this.limit, this.cursor, this.query});
 
   @override
   final int? limit;
-  @override
   final String? cursor;
   @override
   final String? query;
 }
 
-/// DTO that mixes [ACListLoadingResult] — mirrors the consumer pattern for
-/// custom-response flows (`ACCustomListLoadingDispatcher`).
-final class _TestPage<T> with ACListLoadingResult<T> {
+/// DTO that mixes [ACResult] — mirrors the consumer pattern for
+/// custom-response flows (`ACCustomDispatcher`).
+final class _TestPage<T> with ACResult<T> {
   const _TestPage(this.items, {this.hasMore = true});
 
   @override
@@ -49,12 +52,12 @@ final class _TestPage<T> with ACListLoadingResult<T> {
   final bool hasMore;
 }
 
-ACDefaultListLoadingDispatcher<_TestParams, int> _buildDispatcher() =>
-    ACDefaultListLoadingDispatcher<_TestParams, int>();
+ACDefaultDispatcher<_TestParams, int> _buildDispatcher() =>
+    ACDefaultDispatcher<_TestParams, int>();
 
 void main() {
-  group('ACListLoadingDispatcher — basic pagination (US1)', () {
-    late ACDefaultListLoadingDispatcher<_TestParams, int> dispatcher;
+  group('ACDispatcher — basic pagination (US1)', () {
+    late ACDefaultDispatcher<_TestParams, int> dispatcher;
     late FakeLoader<List<int>> loader;
 
     setUp(() {
@@ -288,8 +291,8 @@ void main() {
     });
   });
 
-  group('ACListLoadingDispatcher — errors (US1)', () {
-    late ACDefaultListLoadingDispatcher<_TestParams, int> dispatcher;
+  group('ACDispatcher — errors (US1)', () {
+    late ACDefaultDispatcher<_TestParams, int> dispatcher;
     late FakeLoader<List<int>> loader;
 
     setUp(() {
@@ -406,8 +409,8 @@ void main() {
     });
   });
 
-  group('ACListLoadingDispatcher — notify semantics (US1 + T049)', () {
-    late ACDefaultListLoadingDispatcher<_TestParams, int> dispatcher;
+  group('ACDispatcher — notify semantics (US1 + T049)', () {
+    late ACDefaultDispatcher<_TestParams, int> dispatcher;
     late FakeLoader<List<int>> loader;
     late int notifyCount;
     late VoidCallback listener;
@@ -553,7 +556,7 @@ void main() {
     });
   });
 
-  group('ACListLoadingDispatcher — dispose & cancel safety (US1)', () {
+  group('ACDispatcher — dispose & cancel safety (US1)', () {
     test(
         'dispose() while a reload is in flight: pending result discarded '
         'and no notifications fire after dispose', () async {
@@ -667,12 +670,12 @@ void main() {
     });
   });
 
-  group('ACListLoadingDispatcher — params subtype polymorphism (Phase 8)', () {
+  group('ACDispatcher — params subtype polymorphism (Phase 8)', () {
     test(
-        'ACCustomListLoadingDispatcher accepts ACCursorListLoadingParamsMixin '
-        'subtype', () async {
+        'ACCustomDispatcher accepts cursor-style params (custom field, '
+        'no dedicated mixin)', () async {
       // Arrange — cursor params + DTO-based response.
-      final dispatcher = ACCustomListLoadingDispatcher<_TestCursorParams,
+      final dispatcher = ACCustomDispatcher<_TestCursorParams,
           _TestPage<int>, int>();
       final loader = FakeLoader<_TestPage<int>>();
       loader.enqueueValue(_TestPage<int>(<int>[10, 20], hasMore: true));
@@ -683,9 +686,10 @@ void main() {
         load: loader.call,
       );
 
-      // Assert
+      // Assert — params satisfy the base ACParamsMixin contract; the
+      // cursor field is a plain field readable through the concrete type.
       expect(dispatcher.items, equals(<int>[10, 20]));
-      expect(loader.calls.single, isA<ACCursorListLoadingParamsMixin>());
+      expect(loader.calls.single, isA<ACParamsMixin>());
       expect((loader.calls.single as _TestCursorParams).cursor, isNull);
 
       dispatcher.dispose();
@@ -694,7 +698,7 @@ void main() {
     test('loadMore with cursor params passes cursor through to the loader',
         () async {
       // Arrange — seed with a reload first.
-      final dispatcher = ACCustomListLoadingDispatcher<_TestCursorParams,
+      final dispatcher = ACCustomDispatcher<_TestCursorParams,
           _TestPage<int>, int>();
       final seedLoader = FakeLoader<_TestPage<int>>();
       seedLoader.enqueueValue(_TestPage<int>(<int>[1, 2], hasMore: true));

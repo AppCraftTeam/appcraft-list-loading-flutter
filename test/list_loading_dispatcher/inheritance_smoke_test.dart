@@ -10,7 +10,7 @@ void main() {
       await s.cancel(); // no-op safe
     });
 
-    test('ACDefaultListLoadingDispatcher can be extended', () async {
+    test('ACDefaultDispatcher can be extended', () async {
       final d = _ExtDefaultDispatcher<_Params, String>();
       await d.reload(
         params: const _Params(),
@@ -20,7 +20,7 @@ void main() {
       d.dispose();
     });
 
-    test('ACCustomListLoadingDispatcher can be extended', () async {
+    test('ACCustomDispatcher can be extended', () async {
       final d = _ExtCustomDispatcher<_Params, _DemoResult, String>();
       await d.reload(
         params: const _Params(),
@@ -30,12 +30,12 @@ void main() {
       d.dispose();
     });
 
-    test('ACDefaultListLoadingParser can be extended', () {
+    test('ACDefaultParser can be extended', () {
       const p = _ExtDefaultParser<_Params, String>();
       expect(p.extractItems(const _Params(), ['a']), ['a']);
     });
 
-    test('ACResultListLoadingParser can be extended', () {
+    test('ACResultParser can be extended', () {
       const p = _ExtResultParser<_Params, _DemoResult, String>();
       final result = _DemoResult(items: ['a'], hasMore: false);
       expect(p.extractItems(const _Params(), result), ['a']);
@@ -61,7 +61,7 @@ void main() {
       expect(result, 42);
     });
 
-    test('ACDefaultListLoadingDispatcher can be implemented', () {
+    test('ACDefaultDispatcher can be implemented', () {
       final d = _ImplDefaultDispatcher();
       expect(d.items, isEmpty);
       expect(d.isLoading, isFalse);
@@ -69,19 +69,19 @@ void main() {
       d.dispose();
     });
 
-    test('ACCustomListLoadingDispatcher can be implemented', () {
+    test('ACCustomDispatcher can be implemented', () {
       final d = _ImplCustomDispatcher();
       expect(d.items, isEmpty);
       d.dispose();
     });
 
-    test('ACDefaultListLoadingParser can be implemented', () {
+    test('ACDefaultParser can be implemented', () {
       const p = _ImplDefaultParser();
       expect(p.extractItems(const _Params(), [1, 2]), [1, 2]);
       expect(p.hasMore(const _Params(), [1, 2]), isFalse);
     });
 
-    test('ACResultListLoadingParser can be implemented', () {
+    test('ACResultParser can be implemented', () {
       const p = _ImplResultParser();
       final r = _DemoResult(items: ['a'], hasMore: true);
       expect(p.extractItems(const _Params(), r), ['a']);
@@ -102,7 +102,7 @@ void main() {
 // Helper params/result DTOs
 // =================================================================
 
-class _Params with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+class _Params with ACParamsMixin, ACOffsetParamsMixin {
   const _Params();
 
   @override
@@ -115,7 +115,7 @@ class _Params with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
   String? get query => null;
 }
 
-class _DemoResult with ACListLoadingResult<String> {
+class _DemoResult with ACResult<String> {
   _DemoResult({required this.items, required this.hasMore});
 
   @override
@@ -133,25 +133,25 @@ class _DemoResult with ACListLoadingResult<String> {
 
 class _ExtCancel extends ACOperationCancelStrategy {}
 
-class _ExtDefaultDispatcher<P extends ACOffsetListLoadingParamsMixin, T>
-    extends ACDefaultListLoadingDispatcher<P, T> {
+class _ExtDefaultDispatcher<P extends ACOffsetParamsMixin, T>
+    extends ACDefaultDispatcher<P, T> {
   _ExtDefaultDispatcher({super.searchStrategy});
 }
 
-class _ExtCustomDispatcher<P extends ACListLoadingParamsMixin,
-        R extends ACListLoadingResult<T>, T>
-    extends ACCustomListLoadingDispatcher<P, R, T> {
+class _ExtCustomDispatcher<P extends ACParamsMixin,
+        R extends ACResult<T>, T>
+    extends ACCustomDispatcher<P, R, T> {
   _ExtCustomDispatcher({super.searchStrategy});
 }
 
-class _ExtDefaultParser<P extends ACOffsetListLoadingParamsMixin, T>
-    extends ACDefaultListLoadingParser<P, T> {
+class _ExtDefaultParser<P extends ACOffsetParamsMixin, T>
+    extends ACDefaultParser<P, T> {
   const _ExtDefaultParser();
 }
 
-class _ExtResultParser<P extends ACListLoadingParamsMixin,
-        R extends ACListLoadingResult<T>, T>
-    extends ACResultListLoadingParser<P, R, T> {
+class _ExtResultParser<P extends ACParamsMixin,
+        R extends ACResult<T>, T>
+    extends ACResultParser<P, R, T> {
   const _ExtResultParser();
 }
 
@@ -171,10 +171,10 @@ class _ImplCancel implements ACOperationCancelStrategy {
 }
 
 class _ImplDefaultDispatcher
-    implements ACDefaultListLoadingDispatcher<_Params, String> {
+    implements ACDefaultDispatcher<_Params, String> {
   @override
-  final ACListLoadingParser<_Params, List<String>, String> parser =
-      const ACDefaultListLoadingParser<_Params, String>();
+  final ACParser<_Params, List<String>, String> parser =
+      const ACDefaultParser<_Params, String>();
 
   @override
   final ACSearchStrategy searchStrategy = ACDebouncedSearchStrategy();
@@ -187,6 +187,9 @@ class _ImplDefaultDispatcher
 
   @override
   bool get hasMore => true;
+
+  @override
+  List<String>? get lastResult => null;
 
   @override
   bool get hasListeners => false;
@@ -222,10 +225,10 @@ class _ImplDefaultDispatcher
 }
 
 class _ImplCustomDispatcher
-    implements ACCustomListLoadingDispatcher<_Params, _DemoResult, String> {
+    implements ACCustomDispatcher<_Params, _DemoResult, String> {
   @override
-  final ACListLoadingParser<_Params, _DemoResult, String> parser =
-      const ACResultListLoadingParser<_Params, _DemoResult, String>();
+  final ACParser<_Params, _DemoResult, String> parser =
+      const ACResultParser<_Params, _DemoResult, String>();
 
   @override
   final ACSearchStrategy searchStrategy = ACDebouncedSearchStrategy();
@@ -238,6 +241,9 @@ class _ImplCustomDispatcher
 
   @override
   bool get hasMore => true;
+
+  @override
+  _DemoResult? get lastResult => null;
 
   @override
   bool get hasListeners => false;
@@ -273,7 +279,7 @@ class _ImplCustomDispatcher
 }
 
 class _ImplDefaultParser
-    implements ACDefaultListLoadingParser<_Params, int> {
+    implements ACDefaultParser<_Params, int> {
   const _ImplDefaultParser();
 
   @override
@@ -284,7 +290,7 @@ class _ImplDefaultParser
 }
 
 class _ImplResultParser
-    implements ACResultListLoadingParser<_Params, _DemoResult, String> {
+    implements ACResultParser<_Params, _DemoResult, String> {
   const _ImplResultParser();
 
   @override
