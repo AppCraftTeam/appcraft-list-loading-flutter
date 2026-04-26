@@ -189,6 +189,9 @@ class _ImplDefaultDispatcher
   bool get hasMore => true;
 
   @override
+  List<String>? get lastResult => null;
+
+  @override
   bool get hasListeners => false;
 
   @override
@@ -238,6 +241,9 @@ class _ImplCustomDispatcher
 
   @override
   bool get hasMore => true;
+
+  @override
+  _DemoResult? get lastResult => null;
 
   @override
   bool get hasListeners => false;

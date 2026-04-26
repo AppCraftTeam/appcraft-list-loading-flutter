@@ -73,6 +73,7 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
   bool _hasMore = true;
   bool _disposed = false;
   ACCancelStrategy? _activeCancel;
+  R? _lastResult;
 
   /// Unmodifiable view of the accumulated items.
   ///
@@ -92,6 +93,23 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
   /// Read synchronously; [notifyListeners] is **not** invoked when this
   /// flag changes without a change in [items].
   bool get hasMore => _hasMore;
+
+  /// The last result that was successfully returned by the loader.
+  ///
+  /// Updated after every successful [reload] or [loadMore] — stores the
+  /// raw [R] object as returned by the loader (the same reference, no
+  /// defensive copy). Useful for cursor pagination and DTO scenarios
+  /// where the response carries metadata beyond `items`/`hasMore` —
+  /// for example, `nextCursor`, `totalCount`, or server-side pagination
+  /// tokens.
+  ///
+  /// `null` until the first successful load. Not reset by:
+  /// - rejection by `minLength` in [reload];
+  /// - exceptions thrown by the loader or parser;
+  /// - [cancel] before the wait completes.
+  ///
+  /// Reset to `null` by [dispose].
+  R? get lastResult => _lastResult;
 
   /// Reloads the list.
   ///
@@ -243,6 +261,7 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
     // releasing resources takes priority.
     final previousCancel = _activeCancel;
     _activeCancel = null;
+    _lastResult = null;
     if (previousCancel != null) {
       // Don't await: ChangeNotifier.dispose is synchronous. The result
       // of cancel is no longer needed by anyone.
@@ -300,6 +319,7 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
         _items.addAll(newItems);
       }
       _hasMore = newHasMore;
+      _lastResult = result;
       notifyListeners();
     } finally {
       if (!_disposed && identical(_activeCancel, capturedCancel)) {
