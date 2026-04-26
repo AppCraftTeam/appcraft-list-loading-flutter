@@ -1,7 +1,7 @@
 /// Base contract for loading parameters accepted by the list dispatcher.
 ///
 /// A user-defined parameters type (passed to `reload` and `loadMore`) must
-/// mix in one of the concrete mixins — [ACOffsetListLoadingParamsMixin] for
+/// mix in one of the concrete mixins — [ACOffsetParamsMixin] for
 /// offset-based pagination or [ACCursorListLoadingParamsMixin] for
 /// cursor-based pagination — both built on top of this base mixin.
 ///
@@ -12,7 +12,7 @@
 ///   minLength, reset on empty value).
 ///
 /// The mixin contains no logic: it only declares getters.
-mixin ACListLoadingParamsMixin {
+mixin ACParamsMixin {
   /// Maximum number of items the loader is expected to return.
   ///
   /// Informational field: the dispatcher does not read it. A value `>= 0`
@@ -29,7 +29,7 @@ mixin ACListLoadingParamsMixin {
 
 /// Offset pagination parameters.
 ///
-/// Built on top of [ACListLoadingParamsMixin] by adding the [offset]
+/// Built on top of [ACParamsMixin] by adding the [offset]
 /// field — the offset of the first requested record. The dispatcher does
 /// not read this field; it is intended for the loader when building a
 /// request to the data source.
@@ -38,7 +38,7 @@ mixin ACListLoadingParamsMixin {
 ///
 /// ```dart
 /// final class UserListParams
-///     with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+///     with ACParamsMixin, ACOffsetParamsMixin {
 ///   const UserListParams({this.offset, this.limit, this.query});
 ///
 ///   @override
@@ -49,7 +49,7 @@ mixin ACListLoadingParamsMixin {
 ///   final String? query;
 /// }
 /// ```
-mixin ACOffsetListLoadingParamsMixin on ACListLoadingParamsMixin {
+mixin ACOffsetParamsMixin on ACParamsMixin {
   /// Offset for offset-based pagination.
   ///
   /// Informational field: the dispatcher does not read it. A value `>= 0`
@@ -59,7 +59,7 @@ mixin ACOffsetListLoadingParamsMixin on ACListLoadingParamsMixin {
 
 /// Cursor pagination parameters.
 ///
-/// Built on top of [ACListLoadingParamsMixin] by adding the [cursor]
+/// Built on top of [ACParamsMixin] by adding the [cursor]
 /// field — an opaque identifier of the next page returned by the data
 /// source in its response. The dispatcher does not read this field;
 /// keeping the current cursor between `reload`/`loadMore` calls is the
@@ -69,7 +69,7 @@ mixin ACOffsetListLoadingParamsMixin on ACListLoadingParamsMixin {
 ///
 /// ```dart
 /// final class UserCursorParams
-///     with ACListLoadingParamsMixin, ACCursorListLoadingParamsMixin {
+///     with ACParamsMixin, ACCursorListLoadingParamsMixin {
 ///   const UserCursorParams({this.limit, this.cursor, this.query});
 ///
 ///   @override
@@ -80,7 +80,7 @@ mixin ACOffsetListLoadingParamsMixin on ACListLoadingParamsMixin {
 ///   final String? query;
 /// }
 /// ```
-mixin ACCursorListLoadingParamsMixin on ACListLoadingParamsMixin {
+mixin ACCursorListLoadingParamsMixin on ACParamsMixin {
   /// Opaque cursor of the next page (or `null` before the first load /
   /// on the last page).
   ///

@@ -9,11 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';
 
-/// Offset-based params — used by the `ACDefaultListLoadingDispatcher` where
+/// Offset-based params — used by the `ACDefaultDispatcher` where
 /// the loader returns a bare `List<T>` and `hasMore` is computed from
 /// `params.limit`.
 final class _TestParams
-    with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+    with ACParamsMixin, ACOffsetParamsMixin {
   const _TestParams({this.limit, this.offset, this.query});
 
   @override
@@ -24,10 +24,10 @@ final class _TestParams
   final String? query;
 }
 
-/// Cursor-based params — used by the `ACCustomListLoadingDispatcher` where
-/// the loader returns a DTO that mixes [ACListLoadingResult].
+/// Cursor-based params — used by the `ACCustomDispatcher` where
+/// the loader returns a DTO that mixes [ACResult].
 final class _TestCursorParams
-    with ACListLoadingParamsMixin, ACCursorListLoadingParamsMixin {
+    with ACParamsMixin, ACCursorListLoadingParamsMixin {
   const _TestCursorParams({this.limit, this.cursor, this.query});
 
   @override
@@ -38,9 +38,9 @@ final class _TestCursorParams
   final String? query;
 }
 
-/// DTO that mixes [ACListLoadingResult] — mirrors the consumer pattern for
-/// custom-response flows (`ACCustomListLoadingDispatcher`).
-final class _TestPage<T> with ACListLoadingResult<T> {
+/// DTO that mixes [ACResult] — mirrors the consumer pattern for
+/// custom-response flows (`ACCustomDispatcher`).
+final class _TestPage<T> with ACResult<T> {
   const _TestPage(this.items, {this.hasMore = true});
 
   @override
@@ -49,12 +49,12 @@ final class _TestPage<T> with ACListLoadingResult<T> {
   final bool hasMore;
 }
 
-ACDefaultListLoadingDispatcher<_TestParams, int> _buildDispatcher() =>
-    ACDefaultListLoadingDispatcher<_TestParams, int>();
+ACDefaultDispatcher<_TestParams, int> _buildDispatcher() =>
+    ACDefaultDispatcher<_TestParams, int>();
 
 void main() {
-  group('ACListLoadingDispatcher — basic pagination (US1)', () {
-    late ACDefaultListLoadingDispatcher<_TestParams, int> dispatcher;
+  group('ACDispatcher — basic pagination (US1)', () {
+    late ACDefaultDispatcher<_TestParams, int> dispatcher;
     late FakeLoader<List<int>> loader;
 
     setUp(() {
@@ -288,8 +288,8 @@ void main() {
     });
   });
 
-  group('ACListLoadingDispatcher — errors (US1)', () {
-    late ACDefaultListLoadingDispatcher<_TestParams, int> dispatcher;
+  group('ACDispatcher — errors (US1)', () {
+    late ACDefaultDispatcher<_TestParams, int> dispatcher;
     late FakeLoader<List<int>> loader;
 
     setUp(() {
@@ -406,8 +406,8 @@ void main() {
     });
   });
 
-  group('ACListLoadingDispatcher — notify semantics (US1 + T049)', () {
-    late ACDefaultListLoadingDispatcher<_TestParams, int> dispatcher;
+  group('ACDispatcher — notify semantics (US1 + T049)', () {
+    late ACDefaultDispatcher<_TestParams, int> dispatcher;
     late FakeLoader<List<int>> loader;
     late int notifyCount;
     late VoidCallback listener;
@@ -553,7 +553,7 @@ void main() {
     });
   });
 
-  group('ACListLoadingDispatcher — dispose & cancel safety (US1)', () {
+  group('ACDispatcher — dispose & cancel safety (US1)', () {
     test(
         'dispose() while a reload is in flight: pending result discarded '
         'and no notifications fire after dispose', () async {
@@ -667,12 +667,12 @@ void main() {
     });
   });
 
-  group('ACListLoadingDispatcher — params subtype polymorphism (Phase 8)', () {
+  group('ACDispatcher — params subtype polymorphism (Phase 8)', () {
     test(
-        'ACCustomListLoadingDispatcher accepts ACCursorListLoadingParamsMixin '
+        'ACCustomDispatcher accepts ACCursorListLoadingParamsMixin '
         'subtype', () async {
       // Arrange — cursor params + DTO-based response.
-      final dispatcher = ACCustomListLoadingDispatcher<_TestCursorParams,
+      final dispatcher = ACCustomDispatcher<_TestCursorParams,
           _TestPage<int>, int>();
       final loader = FakeLoader<_TestPage<int>>();
       loader.enqueueValue(_TestPage<int>(<int>[10, 20], hasMore: true));
@@ -694,7 +694,7 @@ void main() {
     test('loadMore with cursor params passes cursor through to the loader',
         () async {
       // Arrange — seed with a reload first.
-      final dispatcher = ACCustomListLoadingDispatcher<_TestCursorParams,
+      final dispatcher = ACCustomDispatcher<_TestCursorParams,
           _TestPage<int>, int>();
       final seedLoader = FakeLoader<_TestPage<int>>();
       seedLoader.enqueueValue(_TestPage<int>(<int>[1, 2], hasMore: true));

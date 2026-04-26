@@ -1,9 +1,9 @@
 import 'package:appcraft_list_loading_flutter/src/ac_list_loading_result.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Minimal DTO that mixes in [ACListLoadingResult] — same shape users apply to
+/// Minimal DTO that mixes in [ACResult] — same shape users apply to
 /// their response models.
-final class _TestPage<T> with ACListLoadingResult<T> {
+final class _TestPage<T> with ACResult<T> {
   const _TestPage({required this.items, required this.hasMore});
 
   @override
@@ -14,7 +14,7 @@ final class _TestPage<T> with ACListLoadingResult<T> {
 }
 
 void main() {
-  group('ACListLoadingResult (mixin)', () {
+  group('ACResult (mixin)', () {
     test('exposes items and hasMore from the mixing class', () {
       // Arrange
       const page = _TestPage<int>(items: <int>[1, 2, 3], hasMore: true);
@@ -43,12 +43,12 @@ void main() {
       expect(stringPage.items, isA<List<String>>());
     });
 
-    test('instances satisfy ACListLoadingResult<T> subtype check', () {
+    test('instances satisfy ACResult<T> subtype check', () {
       // Arrange
       const page = _TestPage<int>(items: <int>[1], hasMore: false);
 
       // Act & Assert
-      expect(page, isA<ACListLoadingResult<int>>());
+      expect(page, isA<ACResult<int>>());
     });
   });
 }

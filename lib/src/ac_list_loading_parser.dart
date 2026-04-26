@@ -5,7 +5,7 @@ import 'ac_list_loading_result.dart';
 /// result.
 ///
 /// The parser allows the dispatcher to work with an arbitrary response
-/// type [R] without requiring it to be wrapped in [ACListLoadingResult].
+/// type [R] without requiring it to be wrapped in [ACResult].
 /// This is useful when the source returns a plain list (`List<T>`) or a
 /// DTO with its own field schema.
 ///
@@ -16,9 +16,9 @@ import 'ac_list_loading_result.dart';
 /// - [hasMore] synchronously computes whether a next page is available
 ///   from the result and/or the passed parameters. Exceptions thrown by
 ///   parser methods propagate out of `reload`/`loadMore`.
-abstract class ACListLoadingParser<P extends ACListLoadingParamsMixin, R, T> {
+abstract class ACParser<P extends ACParamsMixin, R, T> {
   /// Const constructor so that subclasses can declare `const` instances.
-  const ACListLoadingParser();
+  const ACParser();
 
   /// Extracts the items of the current page from [result].
   List<T> extractItems(P params, R result);
@@ -30,17 +30,17 @@ abstract class ACListLoadingParser<P extends ACListLoadingParamsMixin, R, T> {
 /// Parser for offset pagination: the loader returns a plain `List<T>`.
 ///
 /// `hasMore` is computed as `result.length >= params.limit`. If
-/// [ACListLoadingParamsMixin.limit] is `null`, the source is assumed to
+/// [ACParamsMixin.limit] is `null`, the source is assumed to
 /// have no limit and pages may continue indefinitely (`hasMore == true`).
 ///
 /// **Extension point**: can be extended or implemented. Overrides of
 /// `extractItems` and `hasMore` must remain side-effect free and
 /// synchronous.
-class ACDefaultListLoadingParser<
-    P extends ACOffsetListLoadingParamsMixin, T>
-    implements ACListLoadingParser<P, List<T>, T> {
+class ACDefaultParser<
+    P extends ACOffsetParamsMixin, T>
+    implements ACParser<P, List<T>, T> {
   /// Creates a parser. The instance can be declared as `const`.
-  const ACDefaultListLoadingParser();
+  const ACDefaultParser();
 
   @override
   List<T> extractItems(P params, List<T> result) => result;
@@ -53,21 +53,21 @@ class ACDefaultListLoadingParser<
   }
 }
 
-/// Parser for DTOs that mix in [ACListLoadingResult].
+/// Parser for DTOs that mix in [ACResult].
 ///
 /// Delegates both methods directly to the result getters: [extractItems]
 /// returns `result.items`, [hasMore] returns `result.hasMore`.
 ///
 /// **Extension point**: can be extended or implemented. Overrides of
 /// `extractItems` and `hasMore` must remain side-effect free and
-/// synchronous, and continue to honor the [ACListLoadingResult] contract
+/// synchronous, and continue to honor the [ACResult] contract
 /// of the result type [R].
-class ACResultListLoadingParser<
-    P extends ACListLoadingParamsMixin,
-    R extends ACListLoadingResult<T>,
-    T> implements ACListLoadingParser<P, R, T> {
+class ACResultParser<
+    P extends ACParamsMixin,
+    R extends ACResult<T>,
+    T> implements ACParser<P, R, T> {
   /// Creates a parser. The instance can be declared as `const`.
-  const ACResultListLoadingParser();
+  const ACResultParser();
 
   @override
   List<T> extractItems(P params, R result) => result.items;

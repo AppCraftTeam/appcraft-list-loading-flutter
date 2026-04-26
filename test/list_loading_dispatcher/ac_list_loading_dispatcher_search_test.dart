@@ -7,9 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';
 
-/// Offset-based params used with [ACDefaultListLoadingDispatcher].
+/// Offset-based params used with [ACDefaultDispatcher].
 final class _TestParams
-    with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+    with ACParamsMixin, ACOffsetParamsMixin {
   const _TestParams({this.limit, this.offset, this.query});
 
   @override
@@ -20,15 +20,15 @@ final class _TestParams
   final String? query;
 }
 
-ACDefaultListLoadingDispatcher<_TestParams, int> _buildDispatcher({
+ACDefaultDispatcher<_TestParams, int> _buildDispatcher({
   ACSearchStrategy? searchStrategy,
 }) =>
-    ACDefaultListLoadingDispatcher<_TestParams, int>(
+    ACDefaultDispatcher<_TestParams, int>(
       searchStrategy: searchStrategy,
     );
 
 void main() {
-  group('ACListLoadingDispatcher — search in reload (US2)', () {
+  group('ACDispatcher — search in reload (US2)', () {
     test('query == null: load starts immediately, no debounce delay', () {
       FakeAsync().run((async) {
         // Arrange
@@ -324,7 +324,7 @@ void main() {
     });
   });
 
-  group('ACListLoadingDispatcher — loadMore search semantics (US2)', () {
+  group('ACDispatcher — loadMore search semantics (US2)', () {
     test(
         'loadMore with any query does NOT apply debounce: loader runs '
         'immediately', () {

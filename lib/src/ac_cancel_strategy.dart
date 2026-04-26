@@ -38,7 +38,7 @@ abstract class ACCancelStrategy {
 /// `CancelableOperation` from `package:async`.
 ///
 /// Used by the dispatcher by default: if `defaultCancelStrategy` is not
-/// passed to the `ACListLoadingDispatcher` constructor and a particular
+/// passed to the `ACDispatcher` constructor and a particular
 /// `reload`/`loadMore` call does not receive a `cancelStrategy`, the
 /// dispatcher creates a new [ACOperationCancelStrategy] for each load.
 ///

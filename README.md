@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A single-purpose Flutter package for paginated list loading. It provides the
-`ACListLoadingDispatcher`, which encapsulates the loading lifecycle
+`ACDispatcher`, which encapsulates the loading lifecycle
 (reload / loadMore / cancel / dispose), reusable parsers for plain `List<T>`
 and DTO responses, parameter mixins for offset- and cursor-based pagination,
 and ready-to-use strategies for debounced search and load cancellation.
@@ -14,19 +14,19 @@ without imposing any specific state-management library (it extends
 
 ## Features
 
-- Offset pagination via `ACDefaultListLoadingDispatcher` and
-  `ACOffsetListLoadingParamsMixin`.
+- Offset pagination via `ACDefaultDispatcher` and
+  `ACOffsetParamsMixin`.
 - Cursor pagination via `ACCursorListLoadingParamsMixin` and any DTO with
-  the `ACListLoadingResult` mixin.
-- DTO responses with explicit `hasMore` via `ACCustomListLoadingDispatcher` +
-  `ACResultListLoadingParser`.
+  the `ACResult` mixin.
+- DTO responses with explicit `hasMore` via `ACCustomDispatcher` +
+  `ACResultParser`.
 - Debounced search with `minLength` via `ACDebouncedSearchStrategy`.
 - Cancellation strategies: the `ACCancelStrategy` contract and a ready
   `ACOperationCancelStrategy` implementation on top of `package:async`.
 - Integration with `ChangeNotifier` — subscribe via `ListenableBuilder`,
   `AnimatedBuilder` or `addListener`.
-- Reusable parsers: `ACListLoadingParser`, `ACDefaultListLoadingParser`,
-  `ACResultListLoadingParser`.
+- Reusable parsers: `ACParser`, `ACDefaultParser`,
+  `ACResultParser`.
 
 ## Installation
 
@@ -36,7 +36,7 @@ flutter pub add appcraft_list_loading_flutter
 
 ## Usage
 
-### 1. Basic — `ACDefaultListLoadingDispatcher`
+### 1. Basic — `ACDefaultDispatcher`
 
 The simplest scenario: the loader returns a plain `List<T>`, offset-based
 pagination, no search. `hasMore` is computed by the parser as
@@ -46,7 +46,7 @@ pagination, no search. `hasMore` is computed by the parser as
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
 
 final class UserListParams
-    with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+    with ACParamsMixin, ACOffsetParamsMixin {
   const UserListParams({this.offset, this.limit, this.query});
 
   @override
@@ -57,7 +57,7 @@ final class UserListParams
   final String? query;
 }
 
-final dispatcher = ACDefaultListLoadingDispatcher<UserListParams, User>();
+final dispatcher = ACDefaultDispatcher<UserListParams, User>();
 
 await dispatcher.reload(
   params: const UserListParams(offset: 0, limit: 20),
@@ -71,16 +71,16 @@ await dispatcher.loadMore(
 );
 ```
 
-### 2. DTO with `ACListLoadingResult` — `ACCustomListLoadingDispatcher`
+### 2. DTO with `ACResult` — `ACCustomDispatcher`
 
 If the backend returns a DTO with an explicit `hasMore` flag (or cursor),
-the DTO mixes in `ACListLoadingResult<T>` and the dispatcher will read
+the DTO mixes in `ACResult<T>` and the dispatcher will read
 `items` and `hasMore` from it automatically.
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
 
-final class UserPage with ACListLoadingResult<User> {
+final class UserPage with ACResult<User> {
   const UserPage({required this.items, required this.hasMore, this.nextCursor});
 
   @override
@@ -91,7 +91,7 @@ final class UserPage with ACListLoadingResult<User> {
 }
 
 final class UserCursorParams
-    with ACListLoadingParamsMixin, ACCursorListLoadingParamsMixin {
+    with ACParamsMixin, ACCursorListLoadingParamsMixin {
   const UserCursorParams({this.limit, this.cursor, this.query});
 
   @override
@@ -103,7 +103,7 @@ final class UserCursorParams
 }
 
 final dispatcher =
-    ACCustomListLoadingDispatcher<UserCursorParams, UserPage, User>();
+    ACCustomDispatcher<UserCursorParams, UserPage, User>();
 
 await dispatcher.reload(
   params: const UserCursorParams(limit: 20),
@@ -120,7 +120,7 @@ The search strategy applies only in `reload`: for a query shorter than
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
 
-final dispatcher = ACDefaultListLoadingDispatcher<UserListParams, User>(
+final dispatcher = ACDefaultDispatcher<UserListParams, User>(
   searchStrategy: ACDebouncedSearchStrategy(
     debounce: const Duration(milliseconds: 400),
     minLength: 2,
@@ -191,22 +191,22 @@ parsing or cancellation behavior without copying the source.
 
 Open classes:
 
-- `ACDefaultListLoadingDispatcher`
-- `ACCustomListLoadingDispatcher`
-- `ACDefaultListLoadingParser`
-- `ACResultListLoadingParser`
+- `ACDefaultDispatcher`
+- `ACCustomDispatcher`
+- `ACDefaultParser`
+- `ACResultParser`
 - `ACDebouncedSearchStrategy`
 - `ACOperationCancelStrategy`
 
-(The abstract classes `ACListLoadingDispatcher`, `ACListLoadingParser`,
+(The abstract classes `ACDispatcher`, `ACParser`,
 `ACSearchStrategy`, `ACCancelStrategy` and the mixins were already open in
 prior versions.)
 
 ### Example: extending the default dispatcher
 
 ```dart
-class LoggingDispatcher<P extends ACOffsetListLoadingParamsMixin, T>
-    extends ACDefaultListLoadingDispatcher<P, T> {
+class LoggingDispatcher<P extends ACOffsetParamsMixin, T>
+    extends ACDefaultDispatcher<P, T> {
   LoggingDispatcher({super.searchStrategy});
 
   @override
@@ -218,25 +218,25 @@ class LoggingDispatcher<P extends ACOffsetListLoadingParamsMixin, T>
 ```
 
 When extending, respect the parent contract documented in the corresponding
-class' API docs. In particular, `ACDefaultListLoadingDispatcher` extends
+class' API docs. In particular, `ACDefaultDispatcher` extends
 `ChangeNotifier` — overrides of `dispose()` must call `super.dispose()`.
 
 ## API Reference
 
-- `ACListLoadingDispatcher<P, R, T>` — the core dispatcher with `reload`,
+- `ACDispatcher<P, R, T>` — the core dispatcher with `reload`,
   `loadMore`, `cancel` and `dispose` methods.
-- `ACDefaultListLoadingDispatcher<P, T>` — facade for offset pagination
+- `ACDefaultDispatcher<P, T>` — facade for offset pagination
   with a plain `List<T>` response.
-- `ACCustomListLoadingDispatcher<P, R, T>` — facade for DTOs that mix in
-  `ACListLoadingResult`.
-- `ACListLoadingParser<P, R, T>` — strategy interface for parsing the
+- `ACCustomDispatcher<P, R, T>` — facade for DTOs that mix in
+  `ACResult`.
+- `ACParser<P, R, T>` — strategy interface for parsing the
   loader result.
-- `ACDefaultListLoadingParser<P, T>` — parser implementation for `List<T>`.
-- `ACResultListLoadingParser<P, R, T>` — parser implementation for DTOs
-  with `ACListLoadingResult`.
-- `ACListLoadingResult<T>` — DTO contract mixin (`items`, `hasMore`).
-- `ACListLoadingParamsMixin` — base parameters mixin (`limit`, `query`).
-- `ACOffsetListLoadingParamsMixin` — offset pagination mixin (`offset`).
+- `ACDefaultParser<P, T>` — parser implementation for `List<T>`.
+- `ACResultParser<P, R, T>` — parser implementation for DTOs
+  with `ACResult`.
+- `ACResult<T>` — DTO contract mixin (`items`, `hasMore`).
+- `ACParamsMixin` — base parameters mixin (`limit`, `query`).
+- `ACOffsetParamsMixin` — offset pagination mixin (`offset`).
 - `ACCursorListLoadingParamsMixin` — cursor pagination mixin (`cursor`).
 - `ACSearchStrategy` — search strategy contract (`schedule`, `cancel`,
   `dispose`).

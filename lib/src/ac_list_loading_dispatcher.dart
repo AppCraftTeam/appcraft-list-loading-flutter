@@ -24,16 +24,16 @@ import 'ac_search_strategy.dart';
 ///
 /// Generic parameters:
 /// - [P] — the loading parameters type that mixes in
-///   [ACListLoadingParamsMixin] (and, usually, one of the offset/cursor
+///   [ACParamsMixin] (and, usually, one of the offset/cursor
 ///   mixins);
 /// - [R] — the loader's result type. May be a plain `List<T>` or any
 ///   DTO — extracting items and `hasMore` is encapsulated in [parser];
 /// - [T] — the list element type.
 ///
 /// For typical scenarios the ready facade subclasses are more
-/// convenient: [ACDefaultListLoadingDispatcher] (the loader returns
-/// `List<T>`) and [ACCustomListLoadingDispatcher] (the loader returns
-/// a DTO that mixes in [ACListLoadingResult]).
+/// convenient: [ACDefaultDispatcher] (the loader returns
+/// `List<T>`) and [ACCustomDispatcher] (the loader returns
+/// a DTO that mixes in [ACResult]).
 ///
 /// Search behaviour is configured via [searchStrategy] and applies only
 /// in [reload]: debounce for a changed query, rejection when `minLength`
@@ -45,7 +45,7 @@ import 'ac_search_strategy.dart';
 /// Loader errors are **not** caught: an exception thrown inside
 /// `load(params)` propagates out of [reload]/[loadMore]. The
 /// [isLoading] flag is guaranteed to be reset (via `try/finally`).
-class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
+class ACDispatcher<P extends ACParamsMixin, R, T>
     extends ChangeNotifier {
   /// Creates a dispatcher with the required [parser] and an optional
   /// [searchStrategy].
@@ -57,13 +57,13 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
   /// [ACDebouncedSearchStrategy] with defaults is used (debounce
   /// `300ms`, `minLength = 3`). The strategy is set once and does not
   /// change afterwards.
-  ACListLoadingDispatcher({
+  ACDispatcher({
     required this.parser,
     ACSearchStrategy? searchStrategy,
   }) : searchStrategy = searchStrategy ?? ACDebouncedSearchStrategy();
 
   /// Strategy for extracting items and `hasMore` from the loader result.
-  final ACListLoadingParser<P, R, T> parser;
+  final ACParser<P, R, T> parser;
 
   /// Search behaviour strategy applied in [reload].
   final ACSearchStrategy searchStrategy;
@@ -332,14 +332,14 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
 /// Facade dispatcher for offset pagination with a plain `List<T>`
 /// response.
 ///
-/// Uses [ACDefaultListLoadingParser] — items are taken directly from
+/// Uses [ACDefaultParser] — items are taken directly from
 /// the result, `hasMore` is computed as
 /// `result.length >= params.limit`.
 ///
 /// Example:
 ///
 /// ```dart
-/// final dispatcher = ACDefaultListLoadingDispatcher<UserListParams, User>();
+/// final dispatcher = ACDefaultDispatcher<UserListParams, User>();
 /// await dispatcher.reload(
 ///   params: const UserListParams(offset: 0, limit: 20),
 ///   load: (p) => api.fetchUsers(offset: p.offset, limit: p.limit),
@@ -350,28 +350,28 @@ class ACListLoadingDispatcher<P extends ACListLoadingParamsMixin, R, T>
 /// Overrides of `notifyListeners`, `dispose`, or internal state mutation
 /// must respect the `ChangeNotifier` contract; `super.dispose()` is
 /// required.
-class ACDefaultListLoadingDispatcher<
-        P extends ACOffsetListLoadingParamsMixin, T>
-    extends ACListLoadingDispatcher<P, List<T>, T> {
-  /// Creates a dispatcher with [ACDefaultListLoadingParser] and an
+class ACDefaultDispatcher<
+        P extends ACOffsetParamsMixin, T>
+    extends ACDispatcher<P, List<T>, T> {
+  /// Creates a dispatcher with [ACDefaultParser] and an
   /// optional [searchStrategy].
-  ACDefaultListLoadingDispatcher({
+  ACDefaultDispatcher({
     super.searchStrategy,
   }) : super(
-          parser: ACDefaultListLoadingParser<P, T>(),
+          parser: ACDefaultParser<P, T>(),
         );
 }
 
-/// Facade dispatcher for DTOs that mix in [ACListLoadingResult].
+/// Facade dispatcher for DTOs that mix in [ACResult].
 ///
-/// Uses [ACResultListLoadingParser] — items and `hasMore` are taken
+/// Uses [ACResultParser] — items and `hasMore` are taken
 /// from the corresponding getters on the result.
 ///
 /// Example:
 ///
 /// ```dart
 /// final dispatcher =
-///     ACCustomListLoadingDispatcher<UserCursorParams, UserPage, User>();
+///     ACCustomDispatcher<UserCursorParams, UserPage, User>();
 /// await dispatcher.reload(
 ///   params: const UserCursorParams(cursor: null),
 ///   load: (p) => api.fetchUsers(cursor: p.cursor),
@@ -382,15 +382,15 @@ class ACDefaultListLoadingDispatcher<
 /// Overrides of `notifyListeners`, `dispose`, or internal state mutation
 /// must respect the `ChangeNotifier` contract; `super.dispose()` is
 /// required.
-class ACCustomListLoadingDispatcher<
-        P extends ACListLoadingParamsMixin,
-        R extends ACListLoadingResult<T>,
-        T> extends ACListLoadingDispatcher<P, R, T> {
-  /// Creates a dispatcher with [ACResultListLoadingParser] and an
+class ACCustomDispatcher<
+        P extends ACParamsMixin,
+        R extends ACResult<T>,
+        T> extends ACDispatcher<P, R, T> {
+  /// Creates a dispatcher with [ACResultParser] and an
   /// optional [searchStrategy].
-  ACCustomListLoadingDispatcher({
+  ACCustomDispatcher({
     super.searchStrategy,
   }) : super(
-          parser: ACResultListLoadingParser<P, R, T>(),
+          parser: ACResultParser<P, R, T>(),
         );
 }

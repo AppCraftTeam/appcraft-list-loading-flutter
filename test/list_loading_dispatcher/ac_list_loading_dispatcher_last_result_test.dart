@@ -6,9 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';
 
-/// Offset-based params — used by the `ACDefaultListLoadingDispatcher`.
+/// Offset-based params — used by the `ACDefaultDispatcher`.
 final class _TestParams
-    with ACListLoadingParamsMixin, ACOffsetListLoadingParamsMixin {
+    with ACParamsMixin, ACOffsetParamsMixin {
   const _TestParams({this.offset, this.limit, this.query});
 
   @override
@@ -19,9 +19,9 @@ final class _TestParams
   final String? query;
 }
 
-/// DTO that mixes [ACListLoadingResult] — used by
-/// `ACCustomListLoadingDispatcher` based tests.
-final class _TestPage<T> with ACListLoadingResult<T> {
+/// DTO that mixes [ACResult] — used by
+/// `ACCustomDispatcher` based tests.
+final class _TestPage<T> with ACResult<T> {
   const _TestPage(this.items, {this.hasMore = true});
 
   @override
@@ -31,10 +31,10 @@ final class _TestPage<T> with ACListLoadingResult<T> {
 }
 
 void main() {
-  group('ACListLoadingDispatcher.lastResult — contract (US-LR)', () {
+  group('ACDispatcher.lastResult — contract (US-LR)', () {
     test('AC-LR-1: lastResult returns null before first reload', () {
       // Arrange
-      final dispatcher = ACDefaultListLoadingDispatcher<_TestParams, int>();
+      final dispatcher = ACDefaultDispatcher<_TestParams, int>();
 
       // Act & Assert
       expect(dispatcher.lastResult, isNull);
@@ -44,7 +44,7 @@ void main() {
 
     test('AC-LR-2: lastResult updates after successful reload', () async {
       // Arrange
-      final dispatcher = ACCustomListLoadingDispatcher<_TestParams,
+      final dispatcher = ACCustomDispatcher<_TestParams,
           _TestPage<int>, int>();
       final loader = FakeLoader<_TestPage<int>>();
       final page = _TestPage<int>(<int>[1, 2, 3]);
@@ -69,7 +69,7 @@ void main() {
         'AC-LR-3: lastResult updates after successful loadMore — returns '
         'latest result', () async {
       // Arrange — first reload seeds, then loadMore returns the latest page.
-      final dispatcher = ACCustomListLoadingDispatcher<_TestParams,
+      final dispatcher = ACCustomDispatcher<_TestParams,
           _TestPage<int>, int>();
       final loader = FakeLoader<_TestPage<int>>();
       final firstPage = _TestPage<int>(<int>[1, 2]);
@@ -98,7 +98,7 @@ void main() {
 
     test('AC-LR-4: lastResult preserves on minLength rejection', () async {
       // Arrange — minLength=3 strategy; first reload without a query succeeds.
-      final dispatcher = ACDefaultListLoadingDispatcher<_TestParams, int>(
+      final dispatcher = ACDefaultDispatcher<_TestParams, int>(
         searchStrategy: ACDebouncedSearchStrategy(
           debounce: Duration.zero,
           minLength: 3,
@@ -130,7 +130,7 @@ void main() {
 
     test('AC-LR-5: lastResult preserves on loader exception', () async {
       // Arrange — first reload succeeds, second one throws.
-      final dispatcher = ACCustomListLoadingDispatcher<_TestParams,
+      final dispatcher = ACCustomDispatcher<_TestParams,
           _TestPage<int>, int>();
       final loader = FakeLoader<_TestPage<int>>();
       final firstPage = _TestPage<int>(<int>[1, 2, 3]);
@@ -160,7 +160,7 @@ void main() {
     test('AC-LR-6: lastResult preserves on cancel before completion',
         () async {
       // Arrange — successful reload seeds lastResult.
-      final dispatcher = ACCustomListLoadingDispatcher<_TestParams,
+      final dispatcher = ACCustomDispatcher<_TestParams,
           _TestPage<int>, int>();
       final seedLoader = FakeLoader<_TestPage<int>>();
       final firstPage = _TestPage<int>(<int>[1, 2]);
@@ -200,7 +200,7 @@ void main() {
 
     test('AC-LR-7: lastResult resets to null on dispose', () async {
       // Arrange
-      final dispatcher = ACCustomListLoadingDispatcher<_TestParams,
+      final dispatcher = ACCustomDispatcher<_TestParams,
           _TestPage<int>, int>();
       final loader = FakeLoader<_TestPage<int>>();
       final firstPage = _TestPage<int>(<int>[1, 2, 3]);
