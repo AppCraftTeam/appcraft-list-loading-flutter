@@ -232,7 +232,10 @@ class' API docs. In particular, `ACDefaultDispatcher` extends
 ## API Reference
 
 - `ACDispatcher<P, R, T>` — the core dispatcher with `reload`,
-  `loadMore`, `cancel` and `dispose` methods.
+  `loadMore`, `cancel` and `dispose` methods, plus `items`, `isLoading`,
+  `hasMore`, and `lastResult` getters. `lastResult` exposes the raw `R`
+  returned by the most recent successful load (useful for cursor
+  pagination or DTO metadata).
 - `ACDefaultDispatcher<P, T>` — facade for offset pagination
   with a plain `List<T>` response.
 - `ACCustomDispatcher<P, R, T>` — facade for DTOs that mix in

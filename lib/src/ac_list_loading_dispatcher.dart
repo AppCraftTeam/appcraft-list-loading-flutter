@@ -24,10 +24,13 @@ import 'ac_search_strategy.dart';
 ///
 /// Generic parameters:
 /// - [P] — the loading parameters type that mixes in
-///   [ACParamsMixin] (and, usually, one of the offset/cursor
-///   mixins);
+///   [ACParamsMixin] (and, optionally, [ACOffsetParamsMixin] for offset
+///   pagination, or any custom cursor field);
 /// - [R] — the loader's result type. May be a plain `List<T>` or any
-///   DTO — extracting items and `hasMore` is encapsulated in [parser];
+///   DTO — extracting items and `hasMore` is encapsulated in [parser].
+///   The raw [R] of the most recent successful load is also retained
+///   and exposed via [lastResult] — useful for cursor pagination and
+///   for DTOs that carry metadata beyond `items`/`hasMore`;
 /// - [T] — the list element type.
 ///
 /// For typical scenarios the ready facade subclasses are more
