@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:appcraft_utils_flutter/src/list_loading_dispatcher/src/ac_cancel_strategy.dart';
+import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_cancel_strategy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

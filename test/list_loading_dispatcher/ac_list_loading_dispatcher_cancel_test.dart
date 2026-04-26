@@ -1,9 +1,9 @@
 // ignore_for_file: cascade_invocations, unused_element_parameter, prefer_const_constructors
 import 'dart:async';
 
-import 'package:appcraft_utils_flutter/src/list_loading_dispatcher/src/ac_cancel_strategy.dart';
-import 'package:appcraft_utils_flutter/src/list_loading_dispatcher/src/ac_list_loading_dispatcher.dart';
-import 'package:appcraft_utils_flutter/src/list_loading_dispatcher/src/ac_list_loading_params.dart';
+import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_cancel_strategy.dart';
+import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_dispatcher.dart';
+import 'package:appcraft_list_loading_flutter/src/list_loading_dispatcher/src/ac_list_loading_params.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';

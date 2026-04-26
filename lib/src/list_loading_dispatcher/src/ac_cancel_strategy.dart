@@ -1,51 +1,53 @@
 import 'package:async/async.dart';
 
-/// Контракт стратегии отмены активной загрузки.
+/// Contract for the strategy that cancels an active load.
 ///
-/// Диспатчер создаёт (или получает извне) экземпляр стратегии на каждую
-/// активную загрузку и оборачивает `Future` loader'а через [run]. При
-/// необходимости прервать ожидание (новый `reload`, `cancel`, `dispose`)
-/// диспатчер вызывает [cancel].
+/// The dispatcher creates (or receives from outside) a strategy instance
+/// for each active load and wraps the loader's `Future` via [run]. When
+/// the wait needs to be aborted (a new `reload`, `cancel`, `dispose`)
+/// the dispatcher calls [cancel].
 ///
-/// Контракт:
-/// - [run] вызывается **не более одного раза** за жизненный цикл стратегии.
-///   Повторный вызов — поведение не определено.
-/// - [cancel] можно вызывать до или после [run]; повторные вызовы безопасны
-///   (no-op) и не бросают исключений.
-/// - [isActive] — истина, пока операция запущена и ещё не завершилась
-///   (не получен результат и не была выполнена отмена).
+/// Contract:
+/// - [run] is called **at most once** during the strategy's lifecycle.
+///   Calling it again has undefined behaviour.
+/// - [cancel] may be called before or after [run]; repeated calls are
+///   safe (no-op) and do not throw.
+/// - [isActive] is `true` while the operation is running and has not yet
+///   finished (no result has been received and no cancellation has
+///   happened).
 ///
-/// Обратите внимание: стандартные реализации (в частности
-/// [ACOperationCancelStrategy]) отменяют **ожидание** результата, но не
-/// прерывают саму асинхронную операцию. Например, HTTP-запрос продолжит
-/// выполняться в фоне, а его результат будет проигнорирован.
+/// Note: the standard implementations (in particular
+/// [ACOperationCancelStrategy]) cancel the **wait** for the result, but
+/// do not abort the asynchronous operation itself. For example, an HTTP
+/// request will keep running in the background and its result will be
+/// ignored.
 abstract class ACCancelStrategy {
-  /// Обернуть [future] и вернуть его результат либо `null`, если стратегия
-  /// была отменена через [cancel] до завершения future.
+  /// Wraps [future] and returns its result, or `null` if the strategy
+  /// was cancelled via [cancel] before the future completed.
   Future<T?> run<T>(Future<T> future);
 
-  /// Отменить активную операцию. Повторные вызовы — no-op.
+  /// Cancels the active operation. Repeated calls are a no-op.
   Future<void> cancel();
 
-  /// `true`, если операция запущена через [run] и ещё не завершилась
-  /// (не получен результат и не было вызова [cancel]).
+  /// `true` if an operation has been started via [run] and has not yet
+  /// finished (no result received and no [cancel] call).
   bool get isActive;
 }
 
-/// Дефолтная реализация [ACCancelStrategy] поверх `CancelableOperation`
-/// из `package:async`.
+/// Default [ACCancelStrategy] implementation on top of
+/// `CancelableOperation` from `package:async`.
 ///
-/// Используется диспатчером по умолчанию: если в конструктор
-/// `ACListLoadingDispatcher` не передан `defaultCancelStrategy` и в
-/// конкретный вызов `reload`/`loadMore` не передан `cancelStrategy` —
-/// диспатчер создаёт новую [ACOperationCancelStrategy] на каждую загрузку.
+/// Used by the dispatcher by default: if `defaultCancelStrategy` is not
+/// passed to the `ACListLoadingDispatcher` constructor and a particular
+/// `reload`/`loadMore` call does not receive a `cancelStrategy`, the
+/// dispatcher creates a new [ACOperationCancelStrategy] for each load.
 ///
-/// Важно: эта стратегия не прерывает исходную операцию (например,
-/// HTTP-запрос продолжит выполняться на сервере), а лишь отменяет ожидание
-/// результата на стороне диспатчера. Результат завершившейся в фоне
-/// операции игнорируется.
+/// Important: this strategy does not abort the underlying operation
+/// (for example, an HTTP request will keep running on the server), it
+/// only cancels the wait for the result on the dispatcher's side. The
+/// result of the operation that finished in the background is ignored.
 final class ACOperationCancelStrategy implements ACCancelStrategy {
-  /// Создаёт новую стратегию. Экземпляр одноразовый — на одну загрузку.
+  /// Creates a new strategy. The instance is single-use — one per load.
   ACOperationCancelStrategy();
 
   CancelableOperation<Object?>? _operation;

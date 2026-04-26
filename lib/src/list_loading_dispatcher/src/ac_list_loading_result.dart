@@ -1,12 +1,12 @@
-/// Контракт результата загрузки страницы списка.
+/// Contract for the result of loading a list page.
 ///
-/// Пользовательские response-DTO подмешивают этот миксин и реализуют два
-/// геттера. Диспатчер читает [items] и [hasMore] напрямую — отдельный
-/// parser-колбэк не нужен.
+/// User response DTOs mix in this mixin and implement the two getters.
+/// The dispatcher reads [items] and [hasMore] directly — a separate
+/// parser callback is not required.
 mixin ACListLoadingResult<T> {
-  /// Элементы, полученные на этой странице.
+  /// Items received on this page.
   List<T> get items;
 
-  /// Есть ли ещё страницы для догрузки через `loadMore`.
+  /// Whether there are more pages to load via `loadMore`.
   bool get hasMore;
 }

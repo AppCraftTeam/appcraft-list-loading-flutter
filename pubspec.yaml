@@ -1,7 +1,13 @@
-name: appcraft_utils_flutter
-description: Набор утилит и расширений для Flutter/Dart-проектов команды AppCraft — исключения, расширения, инпуты, локализация, мапперы, модели, нотификаторы и диспатчер загрузки списков.
-version: 0.1.0
-repository: https://github.com/AppCraftTeam/appcraft-utils-flutter
+name: appcraft_list_loading_flutter
+description: Dispatcher for paginated list loading with offset/cursor support, debounced search and pluggable cancellation strategies.
+version: 0.0.1
+repository: https://github.com/AppCraftTeam/appcraft-list-loading-flutter
+
+topics:
+  - pagination
+  - loading
+  - list
+  - dispatcher
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -9,7 +15,6 @@ environment:
 
 dependencies:
   async: ^2.11.0
-  equatable: ^2.0.5
   flutter:
     sdk: flutter
 
@@ -18,4 +23,3 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   lints: ^5.0.0
-  test: ^1.24.0
