@@ -77,6 +77,39 @@ await dispatcher.loadMore(
 );
 ```
 
+#### Manual list control — `mutate` & `hasMore`
+
+For live feeds (realtime append, optimistic update, seed) you can change the
+accumulated list from outside via `mutate`. The callback receives the mutable
+list; a single `notifyListeners()` fires on success (batched — many operations,
+one notification). The `items` getter stays unmodifiable, so `mutate` is the
+only sanctioned write path.
+
+```dart
+// realtime: an incoming item over WebSocket
+socket.onMessage((msg) => dispatcher.mutate((items) => items.add(msg)));
+
+// optimistic: show "sending", then replace with the server object
+dispatcher.mutate((items) => items.add(pending));
+final sent = await api.send(text);
+dispatcher.mutate((items) => items          // two ops → one notification
+  ..removeWhere((m) => m.localId == pending.localId)
+  ..add(sent));
+
+// remove
+dispatcher.mutate((items) => items.removeWhere((m) => m.id == deletedId));
+
+// seed from cache and control pagination manually
+dispatcher.mutate((items) => items.addAll(cached));
+dispatcher.hasMore = true;   // enable loadMore; set false to stop it
+```
+
+Notes: `mutate` is a no-op after `dispose`; a callback exception propagates
+without notifying; `mutate`/`hasMore =` do not cancel an active load (a
+concurrent `reload` will overwrite manual changes — call `cancel()` first to
+seed safely). The `hasMore` setter does not notify listeners. Direct
+`dispatcher.items.add(...)` throws `UnsupportedError` — use `mutate`.
+
 ### 2. DTO with `ACResult` — `ACCustomDispatcher`
 
 If the backend returns a DTO with an explicit `hasMore` flag (or cursor),
@@ -241,7 +274,9 @@ class' API docs. In particular, `ACListDispatcher` extends
   returned by the most recent successful load (useful for cursor
   pagination or DTO metadata).
 - `ACListDispatcher<P, T>` — recommended facade for offset pagination
-  with a plain `List<T>` response.
+  with a plain `List<T>` response. Also exposes `mutate(update)` for
+  external list mutation (realtime/optimistic/seed) with a single batched
+  notification, and a `hasMore` setter for manual pagination control.
 - `ACCustomDispatcher<P, R, T>` — facade for DTOs that mix in
   `ACResult`.
 - `ACParser<P, R, T>` — strategy interface for parsing the
