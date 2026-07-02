@@ -79,7 +79,18 @@ class ACListDispatcher<P extends ACOffsetParamsMixin, T>
   ///
   /// Read synchronously; [notifyListeners] is **not** invoked when this
   /// flag changes without a change in [items].
+  // ignore: unnecessary_getters_setters
   bool get hasMore => _hasMore;
+
+  /// Manually sets the next-page flag.
+  ///
+  /// Overrides the `hasMore` value computed by the last load. It acts as
+  /// the guard for [loadMore]: when set to `false`, subsequent
+  /// [loadMore] calls are ignored; when set to `true`, [loadMore] may run
+  /// again. [notifyListeners] is **not** invoked (parity with the loading
+  /// flags: changing `hasMore` does not notify subscribers). Setting this
+  /// flag does not cancel an active load.
+  set hasMore(bool value) => _hasMore = value;
 
   /// The last page that was successfully returned by the loader.
   ///
@@ -93,6 +104,31 @@ class ACListDispatcher<P extends ACOffsetParamsMixin, T>
   ///
   /// Reset to `null` by [dispose].
   List<T>? get lastResult => _lastResult;
+
+  /// Mutates the accumulated items in place.
+  ///
+  /// This is the **only sanctioned write path** into the internal list:
+  /// the [items] getter returns a `List.unmodifiable` view, so external
+  /// code cannot mutate the accumulated items directly. The [update]
+  /// callback receives the **mutable** backing list and may perform any
+  /// number of changes (add, remove, reorder, replace); all of them are
+  /// batched into a **single** [notifyListeners] call emitted on success.
+  ///
+  /// After [dispose] this is a no-op: the callback is not invoked and no
+  /// notification is emitted.
+  ///
+  /// If [update] throws, the exception is **propagated outside** and
+  /// [notifyListeners] is **not** invoked; there is no rollback of the
+  /// changes applied before the throw.
+  ///
+  /// [mutate] does not cancel an active load: an in-flight [reload] will
+  /// overwrite the mutated items when it resolves. To seed the list
+  /// before a load, call [cancel] first.
+  void mutate(void Function(List<T> items) update) {
+    if (_disposed) return;
+    update(_items);
+    notifyListeners();
+  }
 
   /// Reloads the list.
   ///

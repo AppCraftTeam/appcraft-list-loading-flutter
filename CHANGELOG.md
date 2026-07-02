@@ -15,6 +15,16 @@ Template for future CHANGELOG.md entries:
 
 ## draft
 
+- **Added:** `ACListDispatcher.mutate(void Function(List<T> items) update)` —
+  the sanctioned way to mutate the accumulated list from outside (realtime
+  append, optimistic update, seed). The callback receives the mutable list;
+  a single `notifyListeners()` fires on successful completion (batched — many
+  operations, one notification). No-op after `dispose`; a callback exception
+  propagates without notifying; `lastResult` is untouched. The `items` getter
+  stays unmodifiable — direct `items.add(...)` still throws.
+- **Added:** public setter `ACListDispatcher.hasMore` — manually control
+  whether `loadMore` may fetch (seed / end-of-list). Does not notify
+  listeners (parity with the existing "notify only on items change" rule).
 - **Added:** new self-contained `ACListDispatcher<P extends ACOffsetParamsMixin, T>`
   for the most common scenario — offset pagination over a plain `List<T>`.
   It does the job directly, without extending `ACDispatcher` and without a
