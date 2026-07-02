@@ -1,12 +1,9 @@
-// ignore_for_file: deprecated_member_use_from_same_package
-// These tests intentionally exercise the deprecated ACResult mixin to
-// guarantee its behaviour is preserved until removal in 1.0.0 (FR-007).
-import 'package:appcraft_list_loading_flutter/src/deprecated/ac_result.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Minimal DTO that mixes in [ACResult] — same shape users apply to
-/// their response models.
-final class _TestPage<T> with ACResult<T> {
+/// Minimal DTO that mixes in [ACPage] — mirrors the pattern users apply to
+/// their page-response models (`items` + `hasMore`).
+final class _TestPage<T> with ACPage<T> {
   const _TestPage({required this.items, required this.hasMore});
 
   @override
@@ -17,8 +14,8 @@ final class _TestPage<T> with ACResult<T> {
 }
 
 void main() {
-  group('ACResult (mixin)', () {
-    test('exposes items and hasMore from the mixing class', () {
+  group('ACPage (mixin)', () {
+    test('exposes items and hasMore from the mixing class (P-01)', () {
       // Arrange
       const page = _TestPage<int>(items: <int>[1, 2, 3], hasMore: true);
 
@@ -39,19 +36,20 @@ void main() {
     test('is generic over the item type T', () {
       // Arrange
       const intPage = _TestPage<int>(items: <int>[42], hasMore: true);
-      const stringPage = _TestPage<String>(items: <String>['a'], hasMore: false);
+      const stringPage =
+          _TestPage<String>(items: <String>['a'], hasMore: false);
 
       // Act & Assert — typed getters stay typed through the mixin.
       expect(intPage.items, isA<List<int>>());
       expect(stringPage.items, isA<List<String>>());
     });
 
-    test('instances satisfy ACResult<T> subtype check', () {
+    test('instances satisfy ACPage<T> subtype check (P-02)', () {
       // Arrange
       const page = _TestPage<int>(items: <int>[1], hasMore: false);
 
       // Act & Assert
-      expect(page, isA<ACResult<int>>());
+      expect(page, isA<ACPage<int>>());
     });
   });
 }

@@ -1,5 +1,5 @@
 import '../ac_params.dart';
-import '../ac_parser.dart';
+import 'ac_parser.dart';
 
 /// Parser for offset pagination: the loader returns a plain `List<T>`.
 ///
@@ -16,6 +16,9 @@ import '../ac_parser.dart';
 )
 class ACDefaultParser<
     P extends ACOffsetParamsMixin, T>
+    // Deprecated parser intentionally implements the deprecated ACParser
+    // to keep 0.2.0 behaviour until removal in 1.0.0.
+    // ignore: deprecated_member_use_from_same_package
     implements ACParser<P, List<T>, T> {
   /// Creates a parser. The instance can be declared as `const`.
   const ACDefaultParser();

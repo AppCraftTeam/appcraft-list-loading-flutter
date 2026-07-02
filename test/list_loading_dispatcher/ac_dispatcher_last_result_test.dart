@@ -1,4 +1,8 @@
 // ignore_for_file: cascade_invocations, prefer_const_constructors
+// ignore_for_file: deprecated_member_use_from_same_package
+// These tests intentionally exercise the deprecated ACDefaultDispatcher /
+// ACCustomDispatcher / ACResult to guarantee their behaviour is preserved
+// until removal in 1.0.0 (FR-007).
 import 'dart:async';
 
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';

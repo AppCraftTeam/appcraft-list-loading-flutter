@@ -1,3 +1,8 @@
+// ignore_for_file: deprecated_member_use_from_same_package
+// These smoke tests intentionally extend/implement the deprecated
+// ACDefaultDispatcher / ACCustomDispatcher / ACDefaultParser / ACResultParser
+// / ACParser / ACResult to guarantee they stay usable until removal in
+// 1.0.0 (FR-007, FR-008).
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
