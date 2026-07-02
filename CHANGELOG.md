@@ -13,7 +13,7 @@ Template for future CHANGELOG.md entries:
 - Each change is a separate bullet, without unnecessary implementation details.
 -->
 
-## 0.3.0
+## draft
 
 - **Added:** new self-contained `ACListDispatcher<P extends ACOffsetParamsMixin, T>`
   for the most common scenario — offset pagination over a plain `List<T>`.
