@@ -1,7 +1,11 @@
 // ignore_for_file: prefer_const_constructors, unused_element_parameter
+// ignore_for_file: deprecated_member_use_from_same_package
+// These tests intentionally exercise the deprecated ACDefaultParser to
+// guarantee its behaviour is preserved until removal in 1.0.0 (FR-015).
 import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_parser.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_result.dart';
+import 'package:appcraft_list_loading_flutter/src/deprecated/ac_default_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Offset-based params used to exercise [ACDefaultParser].

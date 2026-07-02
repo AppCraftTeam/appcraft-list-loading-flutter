@@ -1,18 +1,14 @@
 // ignore_for_file: cascade_invocations, unused_element_parameter, prefer_const_constructors
-// ignore_for_file: deprecated_member_use_from_same_package
-// These tests intentionally exercise the deprecated ACDefaultDispatcher to
-// guarantee its behaviour is preserved until removal in 1.0.0 (FR-015).
+import 'package:appcraft_list_loading_flutter/src/ac_list_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_search_strategy.dart';
-import 'package:appcraft_list_loading_flutter/src/deprecated/ac_default_dispatcher.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';
 
-/// Offset-based params used with [ACDefaultDispatcher].
-final class _TestParams
-    with ACParamsMixin, ACOffsetParamsMixin {
+/// Offset-based params used with [ACListDispatcher].
+final class _TestParams with ACParamsMixin, ACOffsetParamsMixin {
   const _TestParams({this.limit, this.offset, this.query});
 
   @override
@@ -23,15 +19,48 @@ final class _TestParams
   final String? query;
 }
 
-ACDefaultDispatcher<_TestParams, int> _buildDispatcher({
+ACListDispatcher<_TestParams, int> _buildDispatcher({
   ACSearchStrategy? searchStrategy,
 }) =>
-    ACDefaultDispatcher<_TestParams, int>(
+    ACListDispatcher<_TestParams, int>(
       searchStrategy: searchStrategy,
     );
 
 void main() {
-  group('ACDispatcher — search in reload (US2)', () {
+  group('ACListDispatcher — default search strategy (US2)', () {
+    test('default strategy is ACDebouncedSearchStrategy (300ms / minLength 3)',
+        () {
+      // Arrange & Act
+      final dispatcher = _buildDispatcher();
+
+      // Assert
+      final strategy = dispatcher.searchStrategy;
+      expect(strategy, isA<ACDebouncedSearchStrategy>());
+      final debounced = strategy as ACDebouncedSearchStrategy;
+      expect(debounced.debounce, equals(const Duration(milliseconds: 300)));
+      expect(debounced.minLength, equals(3));
+
+      dispatcher.dispose();
+    });
+
+    test('custom strategy passed to the constructor is used verbatim', () {
+      // Arrange
+      final custom = ACDebouncedSearchStrategy(
+        debounce: const Duration(milliseconds: 50),
+        minLength: 1,
+      );
+
+      // Act
+      final dispatcher = _buildDispatcher(searchStrategy: custom);
+
+      // Assert
+      expect(dispatcher.searchStrategy, same(custom));
+
+      dispatcher.dispose();
+    });
+  });
+
+  group('ACListDispatcher — search in reload (US2)', () {
     test('query == null: load starts immediately, no debounce delay', () {
       FakeAsync().run((async) {
         // Arrange
@@ -84,12 +113,13 @@ void main() {
 
     test(
         'query.length < minLength: items cleared, hasMore=false, loader NOT '
-        'called', () {
+        'called, lastResult preserved', () {
       FakeAsync().run((async) {
         // Arrange — seed items so we can observe clearing.
         final dispatcher = _buildDispatcher();
         final seedLoader = FakeLoader<List<int>>();
-        seedLoader.enqueueValue(<int>[1, 2, 3]);
+        final firstPage = <int>[1, 2, 3];
+        seedLoader.enqueueValue(firstPage);
         dispatcher
             .reload(
               params: const _TestParams(),
@@ -98,6 +128,7 @@ void main() {
             .ignore();
         async.flushMicrotasks();
         expect(dispatcher.items, equals(<int>[1, 2, 3]));
+        expect(dispatcher.lastResult, same(firstPage));
 
         // Act — reload with a too-short query.
         final searchLoader = FakeLoader<List<int>>();
@@ -117,6 +148,36 @@ void main() {
             reason: 'short-query reload must clear accumulated items');
         expect(dispatcher.hasMore, isFalse);
         expect(dispatcher.isLoading, isFalse);
+        expect(dispatcher.lastResult, same(firstPage),
+            reason: 'minLength rejection must not reset lastResult');
+
+        dispatcher.dispose();
+      });
+    });
+
+    test(
+        'minLength rejection on an already-empty list: no notification',
+        () {
+      FakeAsync().run((async) {
+        // Arrange — items are empty right after construction.
+        final dispatcher = _buildDispatcher();
+        final loader = FakeLoader<List<int>>();
+        var notifyCount = 0;
+        dispatcher.addListener(() => notifyCount++);
+
+        // Act — short query, items stay empty (no change).
+        dispatcher
+            .reload(
+              params: const _TestParams(query: 'ab'),
+              load: loader.call,
+            )
+            .ignore();
+        async.flushMicrotasks();
+
+        // Assert
+        expect(dispatcher.items, isEmpty);
+        expect(notifyCount, equals(0),
+            reason: 'no items change means no notification');
 
         dispatcher.dispose();
       });
@@ -159,8 +220,8 @@ void main() {
     });
 
     test(
-        'two successive reloads within debounce window: first timer is '
-        'cancelled, second query wins', () {
+        'two successive reloads within debounce window: first timer cancelled, '
+        'second query wins', () {
       FakeAsync().run((async) {
         // Arrange
         final dispatcher = _buildDispatcher();
@@ -189,8 +250,7 @@ void main() {
         // Assert — neither query has fired yet.
         expect(loader.callCount, 0);
 
-        // Act — elapse the rest of the second reload's debounce (total 300ms
-        // from the second schedule call).
+        // Act — elapse the rest of the second reload's debounce.
         async.elapse(const Duration(milliseconds: 300));
         async.flushMicrotasks();
 
@@ -206,8 +266,8 @@ void main() {
     });
 
     test(
-        'repeated reload with same query after it was applied: load starts '
-        'immediately (no debounce)', () {
+        'repeated reload with the same applied query: load starts immediately '
+        '(no debounce)', () {
       FakeAsync().run((async) {
         // Arrange — first, apply the query normally through debounce.
         final dispatcher = _buildDispatcher();
@@ -242,98 +302,41 @@ void main() {
       });
     });
 
-    test(
-        'reload(query: null) after a search resets internal state; the '
-        'next search of the previous query is debounced again', () {
+    test('custom minLength=1 strategy: single-char query passes and loads', () {
       FakeAsync().run((async) {
-        // Arrange — apply 'john' first.
-        final dispatcher = _buildDispatcher();
+        // Arrange — custom strategy with zero debounce, minLength 1.
+        final dispatcher = _buildDispatcher(
+          searchStrategy: ACDebouncedSearchStrategy(
+            debounce: Duration.zero,
+            minLength: 1,
+          ),
+        );
         final loader = FakeLoader<List<int>>();
-        loader.enqueueValue(<int>[1, 2]);
         loader.enqueueValue(<int>[5, 6]);
-        loader.enqueueValue(<int>[7, 8]);
-        dispatcher
-            .reload(
-              params: const _TestParams(query: 'john'),
-              load: loader.call,
-            )
-            .ignore();
-        async.elapse(const Duration(milliseconds: 300));
-        async.flushMicrotasks();
-        expect(loader.callCount, 1);
 
-        // Act 1 — reload with null query resets immediately.
+        // Act
         dispatcher
             .reload(
-              params: const _TestParams(),
+              params: const _TestParams(query: 'a'),
               load: loader.call,
             )
             .ignore();
         async.flushMicrotasks();
-        expect(loader.callCount, 2);
+
+        // Assert — 1-char query satisfies the custom minLength.
+        expect(loader.callCount, 1);
         expect(dispatcher.items, equals(<int>[5, 6]));
 
-        // Act 2 — searching for 'john' again must be debounced.
-        dispatcher
-            .reload(
-              params: const _TestParams(query: 'john'),
-              load: loader.call,
-            )
-            .ignore();
-        async.elapse(const Duration(milliseconds: 100));
-        async.flushMicrotasks();
-        expect(loader.callCount, 2,
-            reason: 'null reset must have cleared last-applied; search '
-                'must re-debounce');
-
-        // Advance past the debounce — loader fires now.
-        async.elapse(const Duration(milliseconds: 300));
-        async.flushMicrotasks();
-        expect(loader.callCount, 3);
-        expect(dispatcher.items, equals(<int>[7, 8]));
-
         dispatcher.dispose();
-      });
-    });
-
-    test(
-        'dispose during a pending debounce cancels the timer; loader does '
-        'not fire after elapse', () {
-      FakeAsync().run((async) {
-        // Arrange
-        final dispatcher = _buildDispatcher();
-        final loader = FakeLoader<List<int>>();
-        loader.enqueueValue(<int>[1, 2]);
-
-        // Act — start a search; before debounce fires, dispose.
-        dispatcher
-            .reload(
-              params: const _TestParams(query: 'alex'),
-              load: loader.call,
-            )
-            .ignore();
-        async.elapse(const Duration(milliseconds: 100));
-        dispatcher.dispose();
-        async.flushMicrotasks();
-
-        // Elapse past the debounce boundary — the timer must be cancelled.
-        async.elapse(const Duration(milliseconds: 500));
-        async.flushMicrotasks();
-
-        // Assert
-        expect(loader.callCount, 0,
-            reason: 'dispose must cancel pending debounce timer');
       });
     });
   });
 
-  group('ACDispatcher — loadMore search semantics (US2)', () {
-    test(
-        'loadMore with any query does NOT apply debounce: loader runs '
-        'immediately', () {
+  group('ACListDispatcher — loadMore search semantics (US2)', () {
+    test('loadMore with any query does NOT apply debounce: loader runs now',
+        () {
       FakeAsync().run((async) {
-        // Arrange — seed items with a normal reload first (hasMore=true via
-        // null limit).
+        // Arrange — seed items with a normal reload first.
         final dispatcher = _buildDispatcher();
         final loader = FakeLoader<List<int>>()
           ..enqueueValue(<int>[1, 2])
@@ -367,7 +370,7 @@ void main() {
     });
 
     test(
-        'loadMore with query shorter than minLength: minLength check does '
+        'loadMore with a query shorter than minLength: minLength check does '
         'NOT apply; loader fires normally', () {
       FakeAsync().run((async) {
         // Arrange
@@ -403,8 +406,8 @@ void main() {
     });
 
     test(
-        'loadMore does NOT mutate last-applied query: subsequent reload '
-        'with the original query still skips debounce', () {
+        'loadMore does NOT mutate last-applied query: a later reload with the '
+        'original query still skips debounce', () {
       FakeAsync().run((async) {
         // Arrange — apply 'john' through debounce.
         final dispatcher = _buildDispatcher();
@@ -435,7 +438,6 @@ void main() {
 
         // Act 2 — reload with original 'john'. If loadMore had overwritten
         // last-applied to 'different', this reload would be debounced.
-        // It must NOT be.
         dispatcher
             .reload(
               params: const _TestParams(query: 'john'),

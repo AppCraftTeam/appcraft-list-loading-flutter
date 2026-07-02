@@ -13,6 +13,21 @@ Template for future CHANGELOG.md entries:
 - Each change is a separate bullet, without unnecessary implementation details.
 -->
 
+## draft
+
+- **Added:** new self-contained `ACListDispatcher<P extends ACOffsetParamsMixin, T>`
+  for the most common scenario — offset pagination over a plain `List<T>`.
+  It does the job directly, without extending `ACDispatcher` and without a
+  parser: item extraction and `hasMore` (`result.length >= limit`, or `true`
+  when `limit == null`) are built in. Public API is a drop-in match for
+  `ACDefaultDispatcher` (per-call `load`, search via `ACSearchStrategy`,
+  per-call `cancelStrategy`, `List<T>? lastResult`, identical
+  notify/cancel/error/stale-result/guard semantics).
+- **Deprecated:** `ACDefaultDispatcher` and `ACDefaultParser` — will be
+  removed in 1.0.0; use `ACListDispatcher` instead. Both keep working and
+  are still exported; they were moved to `lib/src/deprecated/`.
+- No breaking changes — all 0.2.0 public names remain available.
+
 ## 0.2.0
 
 - **Added:** public `R? lastResult` getter on `ACDispatcher` — stores the
