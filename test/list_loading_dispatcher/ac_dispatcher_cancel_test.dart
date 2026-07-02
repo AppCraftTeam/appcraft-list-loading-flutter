@@ -1,9 +1,12 @@
 // ignore_for_file: cascade_invocations, unused_element_parameter, prefer_const_constructors
+// ignore_for_file: deprecated_member_use_from_same_package
+// These tests intentionally exercise the deprecated ACDefaultDispatcher to
+// guarantee its behaviour is preserved until removal in 1.0.0 (FR-015).
 import 'dart:async';
 
 import 'package:appcraft_list_loading_flutter/src/ac_cancel_strategy.dart';
-import 'package:appcraft_list_loading_flutter/src/ac_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
+import 'package:appcraft_list_loading_flutter/src/deprecated/ac_default_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';

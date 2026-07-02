@@ -14,7 +14,7 @@ without imposing any specific state-management library (it extends
 
 ## Features
 
-- Offset pagination via `ACDefaultDispatcher` and
+- Offset pagination via `ACListDispatcher` and
   `ACOffsetParamsMixin`.
 - Cursor pagination via a custom `cursor` field on your params class +
   `ACCustomDispatcher` + any DTO with the `ACResult` mixin. Use
@@ -26,8 +26,7 @@ without imposing any specific state-management library (it extends
   `ACOperationCancelStrategy` implementation on top of `package:async`.
 - Integration with `ChangeNotifier` — subscribe via `ListenableBuilder`,
   `AnimatedBuilder` or `addListener`.
-- Reusable parsers: `ACParser`, `ACDefaultParser`,
-  `ACResultParser`.
+- Reusable parsers: `ACParser`, `ACResultParser`.
 
 ## Installation
 
@@ -37,11 +36,17 @@ flutter pub add appcraft_list_loading_flutter
 
 ## Usage
 
-### 1. Basic — `ACDefaultDispatcher`
+### 1. Basic — `ACListDispatcher`
 
 The simplest scenario: the loader returns a plain `List<T>`, offset-based
 pagination, no search. `hasMore` is computed by the parser as
-`result.length >= params.limit`.
+`result.length >= params.limit`. `ACListDispatcher` is the recommended
+dispatcher for this case.
+
+> **Migration note:** the older `ACDefaultDispatcher` / `ACDefaultParser`
+> classes are deprecated and will be removed in `1.0.0`. Their public
+> contract is identical to `ACListDispatcher` — migration is just renaming
+> the class. See the [API Reference](#api-reference).
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
@@ -58,7 +63,7 @@ final class UserListParams
   final String? query;
 }
 
-final dispatcher = ACDefaultDispatcher<UserListParams, User>();
+final dispatcher = ACListDispatcher<UserListParams, User>();
 
 await dispatcher.reload(
   params: const UserListParams(offset: 0, limit: 20),
@@ -128,7 +133,7 @@ The search strategy applies only in `reload`: for a query shorter than
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
 
-final dispatcher = ACDefaultDispatcher<UserListParams, User>(
+final dispatcher = ACListDispatcher<UserListParams, User>(
   searchStrategy: ACDebouncedSearchStrategy(
     debounce: const Duration(milliseconds: 400),
     minLength: 2,
@@ -199,9 +204,8 @@ parsing or cancellation behavior without copying the source.
 
 Open classes:
 
-- `ACDefaultDispatcher`
+- `ACListDispatcher`
 - `ACCustomDispatcher`
-- `ACDefaultParser`
 - `ACResultParser`
 - `ACDebouncedSearchStrategy`
 - `ACOperationCancelStrategy`
@@ -210,11 +214,11 @@ Open classes:
 `ACSearchStrategy`, `ACCancelStrategy` and the mixins were already open in
 prior versions.)
 
-### Example: extending the default dispatcher
+### Example: extending the list dispatcher
 
 ```dart
 class LoggingDispatcher<P extends ACOffsetParamsMixin, T>
-    extends ACDefaultDispatcher<P, T> {
+    extends ACListDispatcher<P, T> {
   LoggingDispatcher({super.searchStrategy});
 
   @override
@@ -226,7 +230,7 @@ class LoggingDispatcher<P extends ACOffsetParamsMixin, T>
 ```
 
 When extending, respect the parent contract documented in the corresponding
-class' API docs. In particular, `ACDefaultDispatcher` extends
+class' API docs. In particular, `ACListDispatcher` extends
 `ChangeNotifier` — overrides of `dispose()` must call `super.dispose()`.
 
 ## API Reference
@@ -236,15 +240,17 @@ class' API docs. In particular, `ACDefaultDispatcher` extends
   `hasMore`, and `lastResult` getters. `lastResult` exposes the raw `R`
   returned by the most recent successful load (useful for cursor
   pagination or DTO metadata).
-- `ACDefaultDispatcher<P, T>` — facade for offset pagination
+- `ACListDispatcher<P, T>` — recommended facade for offset pagination
   with a plain `List<T>` response.
 - `ACCustomDispatcher<P, R, T>` — facade for DTOs that mix in
   `ACResult`.
 - `ACParser<P, R, T>` — strategy interface for parsing the
   loader result.
-- `ACDefaultParser<P, T>` — parser implementation for `List<T>`.
 - `ACResultParser<P, R, T>` — parser implementation for DTOs
   with `ACResult`.
+- `ACDefaultDispatcher<P, T>` / `ACDefaultParser<P, T>` — **deprecated**,
+  removed in `1.0.0`. Use `ACListDispatcher` instead; the public contract
+  is identical.
 - `ACResult<T>` — DTO contract mixin (`items`, `hasMore`).
 - `ACParamsMixin` — base parameters mixin (`limit`, `query`).
 - `ACOffsetParamsMixin` — offset pagination mixin (`offset`).

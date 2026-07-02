@@ -2,11 +2,15 @@ import 'package:flutter/foundation.dart';
 
 import 'ac_cancel_strategy.dart';
 import 'ac_params.dart';
-import 'ac_parser.dart';
-import 'ac_result.dart';
 import 'ac_search_strategy.dart';
 
-/// Dispatcher for list loading with pagination and search.
+/// Self-contained dispatcher for offset pagination over a plain `List<T>`.
+///
+/// Unlike `ACDispatcher`, this class does not compose a separate parser:
+/// item extraction and the `hasMore` calculation are built in. The loader
+/// returns a `List<T>` directly — those elements become the accumulated
+/// [items], and `hasMore` is derived from `params.limit` and the returned
+/// page size.
 ///
 /// Encapsulates the loading lifecycle: `reload` restarts the list from
 /// scratch, `loadMore` appends the next page, `cancel` aborts the active
@@ -23,21 +27,9 @@ import 'ac_search_strategy.dart';
 /// wrapping the call in `setState`).
 ///
 /// Generic parameters:
-/// - [P] — the loading parameters type that mixes in
-///   [ACParamsMixin] (and, optionally, [ACOffsetParamsMixin] for offset
-///   pagination, or any custom cursor field);
-/// - [R] — the loader's result type. May be a plain `List<T>` or any
-///   DTO — extracting items and `hasMore` is encapsulated in [parser].
-///   The raw [R] of the most recent successful load is also retained
-///   and exposed via [lastResult] — useful for cursor pagination and
-///   for DTOs that carry metadata beyond `items`/`hasMore`;
+/// - [P] — the loading parameters type mixing in [ACOffsetParamsMixin]
+///   (offset pagination on top of [ACParamsMixin]);
 /// - [T] — the list element type.
-///
-/// For the offset-pagination scenario (the loader returns `List<T>`) the
-/// recommended entry point is the self-contained `ACListDispatcher`. The
-/// former facade `ACDefaultDispatcher` is **deprecated** (removed in
-/// 1.0.0) and lives in `src/deprecated/`. For DTOs that mix in [ACResult]
-/// the ready facade subclass [ACCustomDispatcher] is more convenient.
 ///
 /// Search behaviour is configured via [searchStrategy] and applies only
 /// in [reload]: debounce for a changed query, rejection when `minLength`
@@ -49,25 +41,16 @@ import 'ac_search_strategy.dart';
 /// Loader errors are **not** caught: an exception thrown inside
 /// `load(params)` propagates out of [reload]/[loadMore]. The
 /// [isLoading] flag is guaranteed to be reset (via `try/finally`).
-class ACDispatcher<P extends ACParamsMixin, R, T>
+class ACListDispatcher<P extends ACOffsetParamsMixin, T>
     extends ChangeNotifier {
-  /// Creates a dispatcher with the required [parser] and an optional
-  /// [searchStrategy].
+  /// Creates a dispatcher with an optional [searchStrategy].
   ///
-  /// [parser] is used on every completed loader call to extract items
-  /// and the `hasMore` flag from the result.
-  ///
-  /// If [searchStrategy] is not provided, an
-  /// [ACDebouncedSearchStrategy] with defaults is used (debounce
-  /// `300ms`, `minLength = 3`). The strategy is set once and does not
-  /// change afterwards.
-  ACDispatcher({
-    required this.parser,
+  /// If [searchStrategy] is not provided, an [ACDebouncedSearchStrategy]
+  /// with defaults is used (debounce `300ms`, `minLength = 3`). The
+  /// strategy is set once and does not change afterwards.
+  ACListDispatcher({
     ACSearchStrategy? searchStrategy,
   }) : searchStrategy = searchStrategy ?? ACDebouncedSearchStrategy();
-
-  /// Strategy for extracting items and `hasMore` from the loader result.
-  final ACParser<P, R, T> parser;
 
   /// Search behaviour strategy applied in [reload].
   final ACSearchStrategy searchStrategy;
@@ -77,7 +60,7 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
   bool _hasMore = true;
   bool _disposed = false;
   ACCancelStrategy? _activeCancel;
-  R? _lastResult;
+  List<T>? _lastResult;
 
   /// Unmodifiable view of the accumulated items.
   ///
@@ -98,22 +81,18 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
   /// flag changes without a change in [items].
   bool get hasMore => _hasMore;
 
-  /// The last result that was successfully returned by the loader.
+  /// The last page that was successfully returned by the loader.
   ///
   /// Updated after every successful [reload] or [loadMore] — stores the
-  /// raw [R] object as returned by the loader (the same reference, no
-  /// defensive copy). Useful for cursor pagination and DTO scenarios
-  /// where the response carries metadata beyond `items`/`hasMore` —
-  /// for example, `nextCursor`, `totalCount`, or server-side pagination
-  /// tokens.
+  /// same `List<T>` reference returned by the loader (no defensive copy).
   ///
   /// `null` until the first successful load. Not reset by:
   /// - rejection by `minLength` in [reload];
-  /// - exceptions thrown by the loader or parser;
+  /// - exceptions thrown by the loader;
   /// - [cancel] before the wait completes.
   ///
   /// Reset to `null` by [dispose].
-  R? get lastResult => _lastResult;
+  List<T>? get lastResult => _lastResult;
 
   /// Reloads the list.
   ///
@@ -131,9 +110,8 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
   /// Any active load is cancelled before a new one starts via the
   /// previously stored [ACCancelStrategy].
   ///
-  /// [load] is called with the provided [params]. The result type [R]
-  /// is determined by the dispatcher's generic; extraction of items and
-  /// `hasMore` is performed by [parser]. Loader/parser exceptions are
+  /// [load] is called with the provided [params]; its `List<T>` result
+  /// replaces the accumulated items. Loader exceptions are
   /// **propagated outside**; the [isLoading] flag is reset before the
   /// exception leaves the method.
   ///
@@ -148,7 +126,7 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
   /// start.
   Future<void> reload({
     required P params,
-    required Future<R> Function(P params) load,
+    required Future<List<T>> Function(P params) load,
     ACCancelStrategy? cancelStrategy,
   }) async {
     if (_disposed) return;
@@ -199,20 +177,20 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
   /// minLength check is skipped. The query from [params] is passed to
   /// [load] as-is.
   ///
-  /// Items extracted by [parser] are **appended** to the end of the
-  /// existing list; [hasMore] is updated from the parser result. On a
+  /// The returned items are **appended** to the end of the existing list;
+  /// [hasMore] is recomputed from `params.limit` and the page size. On a
   /// successful load [notifyListeners] is invoked.
   ///
-  /// Loader/parser exceptions are **propagated outside**; the
-  /// [isLoading] flag is reset before the exception leaves the method.
-  /// Accumulated items are not mutated on error.
+  /// Loader exceptions are **propagated outside**; the [isLoading] flag
+  /// is reset before the exception leaves the method. Accumulated items
+  /// are not mutated on error.
   ///
   /// [cancelStrategy] — an optional cancellation strategy specifically
   /// for this load. Priority: argument -> a new
   /// [ACOperationCancelStrategy] for each call.
   Future<void> loadMore({
     required P params,
-    required Future<R> Function(P params) load,
+    required Future<List<T>> Function(P params) load,
     ACCancelStrategy? cancelStrategy,
   }) async {
     if (_disposed) return;
@@ -230,10 +208,10 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
   /// Cancels the active load (including the pending timer in
   /// [searchStrategy]).
   ///
-  /// Does not reset the accumulated [items] or the [hasMore] flag. If
-  /// no load is in progress, this is a safe no-op. After [dispose] it
-  /// is also safe (does nothing). [notifyListeners] is not invoked
-  /// because [items] do not change.
+  /// Does not reset the accumulated [items], the [hasMore] flag or
+  /// [lastResult]. If no load is in progress, this is a safe no-op. After
+  /// [dispose] it is also safe (does nothing). [notifyListeners] is not
+  /// invoked because [items] do not change.
   Future<void> cancel() async {
     if (_disposed) return;
 
@@ -251,9 +229,9 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
   ///
   /// Cancels the active load and the [searchStrategy] pending timer
   /// (cancellation errors are ignored), releases the search strategy's
-  /// resources and marks the dispatcher as disposed. A repeated
-  /// [dispose] is an idempotent no-op. Any public methods called after
-  /// [dispose] become no-ops and do not mutate state.
+  /// resources, resets [lastResult] and marks the dispatcher as disposed.
+  /// A repeated [dispose] is an idempotent no-op. Any public methods
+  /// called after [dispose] become no-ops and do not mutate state.
   @override
   void dispose() {
     if (_disposed) return;
@@ -284,12 +262,14 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
   /// [ACOperationCancelStrategy]. The selected instance is stored in
   /// `_activeCancel` so that the next [reload] can cancel it.
   ///
-  /// Extraction of items and `hasMore` is delegated to [parser].
-  /// Loader/parser exceptions are not caught: `try/finally` guarantees
-  /// that [_isLoading] is reset before the exception is propagated.
+  /// Item extraction is built in — the loader result is the list of
+  /// items. `hasMore` is `true` when `params.limit == null`, otherwise
+  /// `result.length >= params.limit`. Loader exceptions are not caught:
+  /// `try/finally` guarantees that [_isLoading] is reset before the
+  /// exception is propagated.
   Future<void> _runLoad({
     required P params,
-    required Future<R> Function(P params) load,
+    required Future<List<T>> Function(P params) load,
     required bool replace,
     ACCancelStrategy? cancelStrategy,
   }) async {
@@ -308,19 +288,19 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
     }
 
     try {
-      final result = await capturedCancel.run<R>(load(params));
+      final result = await capturedCancel.run<List<T>>(load(params));
       if (_disposed || !identical(_activeCancel, capturedCancel)) return;
       if (result == null) return; // cancelled
 
-      final newItems = parser.extractItems(params, result);
-      final newHasMore = parser.hasMore(params, result);
+      final limit = params.limit;
+      final newHasMore = limit == null || result.length >= limit;
 
       if (replace) {
         _items
           ..clear()
-          ..addAll(newItems);
+          ..addAll(result);
       } else {
-        _items.addAll(newItems);
+        _items.addAll(result);
       }
       _hasMore = newHasMore;
       _lastResult = result;
@@ -331,37 +311,4 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
       }
     }
   }
-}
-
-/// Facade dispatcher for DTOs that mix in [ACResult].
-///
-/// Uses [ACResultParser] — items and `hasMore` are taken
-/// from the corresponding getters on the result.
-///
-/// Example:
-///
-/// ```dart
-/// final dispatcher =
-///     ACCustomDispatcher<UserCursorParams, UserPage, User>();
-/// await dispatcher.reload(
-///   params: const UserCursorParams(cursor: null),
-///   load: (p) => api.fetchUsers(cursor: p.cursor),
-/// );
-/// ```
-///
-/// **Extension point**: can be extended to customize loading behavior.
-/// Overrides of `notifyListeners`, `dispose`, or internal state mutation
-/// must respect the `ChangeNotifier` contract; `super.dispose()` is
-/// required.
-class ACCustomDispatcher<
-        P extends ACParamsMixin,
-        R extends ACResult<T>,
-        T> extends ACDispatcher<P, R, T> {
-  /// Creates a dispatcher with [ACResultParser] and an
-  /// optional [searchStrategy].
-  ACCustomDispatcher({
-    super.searchStrategy,
-  }) : super(
-          parser: ACResultParser<P, R, T>(),
-        );
 }
