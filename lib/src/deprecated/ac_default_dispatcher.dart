@@ -1,6 +1,6 @@
-import '../ac_dispatcher.dart';
 import '../ac_params.dart';
 import 'ac_default_parser.dart';
+import 'ac_dispatcher.dart';
 
 /// Facade dispatcher for offset pagination with a plain `List<T>`
 /// response.
@@ -29,6 +29,9 @@ import 'ac_default_parser.dart';
 )
 class ACDefaultDispatcher<
         P extends ACOffsetParamsMixin, T>
+    // Deprecated facade intentionally extends the deprecated ACDispatcher
+    // to keep 0.2.0 behaviour until removal in 1.0.0.
+    // ignore: deprecated_member_use_from_same_package
     extends ACDispatcher<P, List<T>, T> {
   /// Creates a dispatcher with [ACDefaultParser] and an
   /// optional [searchStrategy].

@@ -3,30 +3,37 @@
 [![Pub Version](https://img.shields.io/pub/v/appcraft_list_loading_flutter)](https://pub.dev/packages/appcraft_list_loading_flutter)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A single-purpose Flutter package for paginated list loading. It provides the
-`ACDispatcher`, which encapsulates the loading lifecycle
-(reload / loadMore / cancel / dispose), reusable parsers for plain `List<T>`
-and DTO responses, parameter mixins for offset- and cursor-based pagination,
-and ready-to-use strategies for debounced search and load cancellation.
+A single-purpose Flutter package for paginated list loading. It provides two
+self-contained dispatchers — `ACListDispatcher` for a plain `List<T>` response
+and `ACPageDispatcher` for a page-model (DTO) response — each encapsulating the
+loading lifecycle (reload / loadMore / cancel / dispose). It also ships
+parameter mixins for offset- and cursor-based pagination, the `ACPage` page
+mixin, and ready-to-use strategies for debounced search and load cancellation.
 Suitable for any list with pagination, a search field and pull-to-refresh —
-without imposing any specific state-management library (it extends
+without imposing any specific state-management library (both dispatchers extend
 `ChangeNotifier`).
 
 ## Features
 
 - Offset pagination via `ACListDispatcher` and
   `ACOffsetParamsMixin`.
+- Page-model (DTO) responses with explicit `hasMore` via `ACPageDispatcher` +
+  any DTO with the `ACPage` mixin.
 - Cursor pagination via a custom `cursor` field on your params class +
-  `ACCustomDispatcher` + any DTO with the `ACResult` mixin. Use
+  `ACPageDispatcher` + an `ACPage` DTO. Use
   `dispatcher.lastResult?.<your_cursor_field>` to feed the next `loadMore`.
-- DTO responses with explicit `hasMore` via `ACCustomDispatcher` +
-  `ACResultParser`.
 - Debounced search with `minLength` via `ACDebouncedSearchStrategy`.
 - Cancellation strategies: the `ACCancelStrategy` contract and a ready
   `ACOperationCancelStrategy` implementation on top of `package:async`.
 - Integration with `ChangeNotifier` — subscribe via `ListenableBuilder`,
   `AnimatedBuilder` or `addListener`.
-- Reusable parsers: `ACParser`, `ACResultParser`.
+- External list control via `mutate` (realtime/optimistic/seed) with a
+  manual `hasMore` setter, on both dispatchers.
+
+> **Deprecated:** `ACDispatcher`, `ACCustomDispatcher`, `ACParser`,
+> `ACResultParser` and the `ACResult` model are deprecated and will be removed
+> in `1.0.0`. Use the self-contained `ACListDispatcher` / `ACPageDispatcher`
+> and the `ACPage` mixin instead. See the [API Reference](#api-reference).
 
 ## Installation
 
@@ -110,17 +117,30 @@ concurrent `reload` will overwrite manual changes — call `cancel()` first to
 seed safely). The `hasMore` setter does not notify listeners. Direct
 `dispatcher.items.add(...)` throws `UnsupportedError` — use `mutate`.
 
-### 2. DTO with `ACResult` — `ACCustomDispatcher`
+### 2. DTO with `ACPage` — `ACPageDispatcher`
 
-If the backend returns a DTO with an explicit `hasMore` flag (or cursor),
-the DTO mixes in `ACResult<T>` and the dispatcher will read
-`items` and `hasMore` from it automatically.
+If the backend returns a DTO with an explicit `hasMore` flag (and/or a
+cursor), the DTO mixes in `ACPage<T>` and `ACPageDispatcher` reads `items`
+and `hasMore` from it automatically — no separate parser is needed. Any extra
+fields (cursor, metadata) are read back through `dispatcher.lastResult`.
+
+> **Migration note:** the older `ACCustomDispatcher` / `ACResultParser` /
+> `ACParser` / `ACDispatcher` classes and the `ACResult` model are deprecated
+> and will be removed in `1.0.0`. Migration is mechanical: change the DTO
+> mixin `ACResult<T>` → `ACPage<T>` (the members are identical) and the
+> dispatcher class `ACCustomDispatcher` → `ACPageDispatcher`. Method
+> signatures, getters and behaviour are unchanged; `mutate` and the `hasMore`
+> setter are added on top. See the [API Reference](#api-reference).
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
 
-final class UserPage with ACResult<User> {
-  const UserPage({required this.items, required this.hasMore, this.nextCursor});
+final class UserPageDto with ACPage<User> {
+  const UserPageDto({
+    required this.items,
+    required this.hasMore,
+    this.nextCursor,
+  });
 
   @override
   final List<User> items;
@@ -140,7 +160,7 @@ final class UserCursorParams with ACParamsMixin {
 }
 
 final dispatcher =
-    ACCustomDispatcher<UserCursorParams, UserPage, User>();
+    ACPageDispatcher<UserCursorParams, UserPageDto, User>();
 
 await dispatcher.reload(
   params: const UserCursorParams(limit: 20),
@@ -156,6 +176,11 @@ await dispatcher.loadMore(
   load: (p) => api.fetchUsersPage(cursor: p.cursor, limit: p.limit),
 );
 ```
+
+`ACPageDispatcher` also supports external list control — `mutate` for
+realtime / optimistic / seed writes (a single batched notification) and a
+manual `hasMore` setter — with the same rules as `ACListDispatcher`. See
+[Manual list control](#manual-list-control--mutate--hasmore).
 
 ### 3. Debounced search — `ACDebouncedSearchStrategy`
 
@@ -231,21 +256,23 @@ await dispatcher.reload(
 
 ## Extending the API
 
-All public concrete classes in `appcraft_list_loading_flutter` are open for
-both `extends` and `implements`. This lets you customize loading, search,
-parsing or cancellation behavior without copying the source.
+The recommended extension points are the self-contained dispatchers
+`ACListDispatcher` and `ACPageDispatcher`: both are open for `extends` and
+`implements`, so you can customize loading, search or cancellation behaviour
+without copying the source. The strategy classes are open too.
 
 Open classes:
 
 - `ACListDispatcher`
-- `ACCustomDispatcher`
-- `ACResultParser`
+- `ACPageDispatcher`
 - `ACDebouncedSearchStrategy`
 - `ACOperationCancelStrategy`
 
-(The abstract classes `ACDispatcher`, `ACParser`,
-`ACSearchStrategy`, `ACCancelStrategy` and the mixins were already open in
-prior versions.)
+The former parser-based extension points — the abstract `ACDispatcher` /
+`ACParser` base classes and the `ACResultParser` implementation — are
+**deprecated** (removed in `1.0.0`); custom parsing logic now lives inside a
+subclass of the relevant dispatcher instead. The `ACSearchStrategy`,
+`ACCancelStrategy` contracts and the mixins remain open.
 
 ### Example: extending the list dispatcher
 
@@ -268,25 +295,21 @@ class' API docs. In particular, `ACListDispatcher` extends
 
 ## API Reference
 
-- `ACDispatcher<P, R, T>` — the core dispatcher with `reload`,
-  `loadMore`, `cancel` and `dispose` methods, plus `items`, `isLoading`,
-  `hasMore`, and `lastResult` getters. `lastResult` exposes the raw `R`
-  returned by the most recent successful load (useful for cursor
-  pagination or DTO metadata).
-- `ACListDispatcher<P, T>` — recommended facade for offset pagination
-  with a plain `List<T>` response. Also exposes `mutate(update)` for
-  external list mutation (realtime/optimistic/seed) with a single batched
-  notification, and a `hasMore` setter for manual pagination control.
-- `ACCustomDispatcher<P, R, T>` — facade for DTOs that mix in
-  `ACResult`.
-- `ACParser<P, R, T>` — strategy interface for parsing the
-  loader result.
-- `ACResultParser<P, R, T>` — parser implementation for DTOs
-  with `ACResult`.
-- `ACDefaultDispatcher<P, T>` / `ACDefaultParser<P, T>` — **deprecated**,
-  removed in `1.0.0`. Use `ACListDispatcher` instead; the public contract
-  is identical.
-- `ACResult<T>` — DTO contract mixin (`items`, `hasMore`).
+### Recommended
+
+- `ACListDispatcher<P, T>` — self-contained dispatcher for offset pagination
+  with a plain `List<T>` response, with `reload`, `loadMore`, `cancel` and
+  `dispose` methods plus `items`, `isLoading`, `hasMore` and `lastResult`
+  getters. Also exposes `mutate(update)` for external list mutation
+  (realtime/optimistic/seed) with a single batched notification, and a
+  `hasMore` setter for manual pagination control.
+- `ACPageDispatcher<P, R, T>` — self-contained dispatcher for a page-model
+  (DTO) response `R extends ACPage<T>`. Same lifecycle, getters, `mutate`
+  and `hasMore` setter as `ACListDispatcher`; `items` and `hasMore` are read
+  directly from the returned page model. `lastResult` exposes the raw `R`
+  from the most recent successful load (useful for cursor pagination or DTO
+  metadata).
+- `ACPage<T>` — page-model contract mixin (`items`, `hasMore`).
 - `ACParamsMixin` — base parameters mixin (`limit`, `query`).
 - `ACOffsetParamsMixin` — offset pagination mixin (`offset`).
 - `ACSearchStrategy` — search strategy contract (`schedule`, `cancel`,
@@ -297,6 +320,21 @@ class' API docs. In particular, `ACListDispatcher` extends
   `isActive`).
 - `ACOperationCancelStrategy` — cancellation implementation on top of
   `CancelableOperation` from `package:async`.
+
+### Deprecated (removed in `1.0.0`)
+
+- `ACDispatcher<P, R, T>` — parser-composing core dispatcher. Replaced by the
+  self-contained `ACListDispatcher` / `ACPageDispatcher`.
+- `ACCustomDispatcher<P, R, T>` — facade for DTOs. Replaced by
+  `ACPageDispatcher`.
+- `ACResult<T>` — DTO contract mixin. Replaced by `ACPage<T>` (identical
+  members).
+- `ACParser<P, R, T>` — parser strategy interface. Parsing now lives inside a
+  dispatcher; no direct replacement.
+- `ACResultParser<P, R, T>` — parser for `ACResult` DTOs. Folded into
+  `ACPageDispatcher`.
+- `ACDefaultDispatcher<P, T>` / `ACDefaultParser<P, T>` — replaced by
+  `ACListDispatcher` (identical public contract).
 
 Detailed documentation is available in the dartdoc on pub.dev.
 

@@ -15,6 +15,20 @@ Template for future CHANGELOG.md entries:
 
 ## draft
 
+- **Added:** new self-contained `ACPageDispatcher<P extends ACParamsMixin, R extends ACPage<T>, T>`
+  for DTO/cursor pagination where the loader returns a page model. It works
+  directly with the model — `items` and `hasMore` are read from it — without
+  extending `ACDispatcher` and without a parser. Full behavioural parity with
+  the deprecated `ACCustomDispatcher`, plus the `mutate` method and the
+  `hasMore` setter (same semantics as on `ACListDispatcher`).
+- **Added:** new page-model contract `ACPage<T>` (mixin with `items` and
+  `hasMore`) — the renamed `ACResult<T>`. DTOs mix in `ACPage` instead.
+- **Deprecated:** the parser architecture and the old model — `ACDispatcher`,
+  `ACCustomDispatcher`, `ACParser`, `ACResultParser` and `ACResult` — will be
+  removed in 1.0.0. Use the self-contained `ACListDispatcher` (plain `List`) or
+  `ACPageDispatcher` (`ACPage` model) instead; migrate DTOs from `ACResult` to
+  `ACPage`. All keep working and are still exported; they were moved to
+  `lib/src/deprecated/`.
 - **Added:** `ACListDispatcher.mutate(void Function(List<T> items) update)` —
   the sanctioned way to mutate the accumulated list from outside (realtime
   append, optimistic update, seed). The callback receives the mutable list;

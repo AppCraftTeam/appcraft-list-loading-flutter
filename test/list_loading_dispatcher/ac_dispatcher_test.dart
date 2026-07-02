@@ -4,10 +4,10 @@
 // guarantee its behaviour is preserved until removal in 1.0.0 (FR-015).
 import 'dart:async';
 
-import 'package:appcraft_list_loading_flutter/src/ac_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
-import 'package:appcraft_list_loading_flutter/src/ac_result.dart';
+import 'package:appcraft_list_loading_flutter/src/deprecated/ac_custom_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/deprecated/ac_default_dispatcher.dart';
+import 'package:appcraft_list_loading_flutter/src/deprecated/ac_result.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
