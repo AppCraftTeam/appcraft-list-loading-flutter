@@ -24,8 +24,8 @@ import 'ac_default_parser.dart';
 /// must respect the `ChangeNotifier` contract; `super.dispose()` is
 /// required.
 @Deprecated(
-  'Будет удалён в 1.0.0. Используйте ACListDispatcher (offset-пагинация '
-  'поверх List без композиции dispatcher+parser).',
+  'Will be removed in 1.0.0. Use ACListDispatcher (offset pagination over '
+  'a plain List without the dispatcher+parser composition).',
 )
 class ACDefaultDispatcher<
         P extends ACOffsetParamsMixin, T>

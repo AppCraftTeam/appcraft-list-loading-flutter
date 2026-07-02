@@ -11,8 +11,8 @@ import '../ac_parser.dart';
 /// `extractItems` and `hasMore` must remain side-effect free and
 /// synchronous.
 @Deprecated(
-  'Будет удалён в 1.0.0. Используйте ACListDispatcher — логика hasMore '
-  'встроена, отдельный parser не нужен.',
+  'Will be removed in 1.0.0. Use ACListDispatcher — the hasMore logic is '
+  'built in, a separate parser is not needed.',
 )
 class ACDefaultParser<
     P extends ACOffsetParamsMixin, T>
