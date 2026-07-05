@@ -265,6 +265,7 @@ Open classes:
 
 - `ACListDispatcher`
 - `ACPageDispatcher`
+- `ACLoadingDispatcher` (abstract — the shared loading engine, see below)
 - `ACDebouncedSearchStrategy`
 - `ACOperationCancelStrategy`
 
@@ -293,6 +294,67 @@ When extending, respect the parent contract documented in the corresponding
 class' API docs. In particular, `ACListDispatcher` extends
 `ChangeNotifier` — overrides of `dispose()` must call `super.dispose()`.
 
+### The shared engine — `ACLoadingDispatcher`
+
+Both dispatchers are thin subclasses of one abstract engine,
+`ACLoadingDispatcher<Params, T>`. The engine owns the whole loading
+lifecycle — search scheduling, cancellation of a previous load, staleness
+guards, the `isLoading` flag and the typed `lastResult` — behind
+`reload` / `loadMore` / `cancel` / `dispose`. A subclass supplies only the
+collection state and three hooks: `hasMore`, `onLoadSuccess` and
+`onLoadRejected`.
+
+> This is an internal refactor: `ACListDispatcher` and `ACPageDispatcher`
+> now share this base, but their public API and behaviour are unchanged —
+> existing code needs no migration.
+
+`ACLoadingDispatcher` is also a public extension point. If neither offset
+(`List<T>`) nor `ACPage`-model pagination fits your backend, subclass the
+engine directly and implement your own `hasMore` rule — the entire
+lifecycle is inherited:
+
+```dart
+final class MyDispatcher<P extends ACParamsMixin, T>
+    extends ACLoadingDispatcher<P, List<T>> {
+  MyDispatcher({super.searchStrategy});
+
+  final List<T> _items = <T>[];
+  bool _hasMore = true;
+
+  List<T> get items => List<T>.unmodifiable(_items);
+
+  @override
+  bool get hasMore => _hasMore;
+  set hasMore(bool value) => _hasMore = value;
+
+  void mutate(void Function(List<T> items) update) {
+    if (isDisposed) return; // isDisposed — @protected from the base
+    update(_items);
+    notifyListeners();
+  }
+
+  @override
+  void onLoadSuccess(List<T> result, P params, {required bool replace}) {
+    replace ? (_items..clear()..addAll(result)) : _items.addAll(result);
+    _hasMore = result.isNotEmpty; // your own pagination rule
+    notifyListeners();
+  }
+
+  @override
+  void onLoadRejected() {
+    final wasNonEmpty = _items.isNotEmpty;
+    _items.clear();
+    _hasMore = false;
+    if (wasNonEmpty) notifyListeners();
+  }
+}
+```
+
+`reload` / `loadMore` / `cancel` / `dispose` / `runLoad` / `isLoading` /
+`lastResult` are inherited — never override them. Notifications are the
+subclass' responsibility: the engine never calls `notifyListeners()`; emit
+it from the hooks only when the collection actually changes.
+
 ## API Reference
 
 ### Recommended
@@ -309,6 +371,11 @@ class' API docs. In particular, `ACListDispatcher` extends
   directly from the returned page model. `lastResult` exposes the raw `R`
   from the most recent successful load (useful for cursor pagination or DTO
   metadata).
+- `ACLoadingDispatcher<Params, T>` — the abstract loading engine shared by
+  both dispatchers. Owns the loading lifecycle (`reload`, `loadMore`,
+  `cancel`, `dispose`, `isLoading`, `lastResult`); subclasses provide the
+  collection state and the `hasMore` / `onLoadSuccess` / `onLoadRejected`
+  hooks. Public extension point for non-standard pagination.
 - `ACPage<T>` — page-model contract mixin (`items`, `hasMore`).
 - `ACParamsMixin` — base parameters mixin (`limit`, `query`).
 - `ACOffsetParamsMixin` — offset pagination mixin (`offset`).
