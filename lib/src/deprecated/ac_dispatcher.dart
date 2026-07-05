@@ -4,6 +4,7 @@ import '../ac_cancel_strategy.dart';
 import '../ac_params.dart';
 import '../ac_search_strategy.dart';
 import 'ac_custom_dispatcher.dart';
+import 'ac_debounced_search_strategy.dart';
 import 'ac_parser.dart';
 import 'ac_result.dart';
 
@@ -69,7 +70,9 @@ class ACDispatcher<P extends ACParamsMixin, R, T>
   ACDispatcher({
     required this.parser,
     ACSearchStrategy? searchStrategy,
-  }) : searchStrategy = searchStrategy ?? ACDebouncedSearchStrategy();
+  }) : searchStrategy = searchStrategy ??
+            // ignore: deprecated_member_use_from_same_package
+            ACDebouncedSearchStrategy();
 
   /// Strategy for extracting items and `hasMore` from the loader result.
   //

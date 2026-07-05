@@ -5,6 +5,7 @@ import 'package:appcraft_list_loading_flutter/src/ac_list_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_page.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_page_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_search_debouncer.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_search_strategy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -45,7 +46,7 @@ final class _FakePage<T> with ACPage<T> {
 
 /// A search strategy that launches immediately (no debounce, no minLength
 /// gate) so tests control timing purely via the loader.
-ACSearchStrategy _immediateStrategy() => ACDebouncedSearchStrategy(
+ACSearchStrategy _immediateStrategy() => ACSearchDebouncer(
       debounce: Duration.zero,
       minLength: 0,
     );

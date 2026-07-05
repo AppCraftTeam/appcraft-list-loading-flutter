@@ -15,6 +15,26 @@ Template for future CHANGELOG.md entries:
 
 ## draft
 
+- **Added:** new standalone `ACDebouncer` — an action-neutral debounce utility
+  that collapses a burst of calls into a single trailing-edge invocation
+  (`run(void Function())`, `isActive`, `cancel()`, `dispose()`), with a
+  non-negative `duration` (default `300ms`; `Duration.zero` fires on the next
+  tick). It knows nothing about loading or search, so it is reusable for any
+  debounced behaviour (read-tracking, autosave, analytics throttling, ...).
+  `dispose()` is mandatory — it cancels the pending timer so a deferred action
+  never fires after teardown.
+- **Added:** new `ACSearchDebouncer implements ACSearchStrategy` — the new
+  default search strategy on both dispatchers (`debounce: 300ms`,
+  `minLength: 3`), built by composing an `ACDebouncer` for timing. Search
+  behaviour (empty / `< minLength` / equal / zero / debounce gating) is
+  **unchanged** from the previous default. The `ACSearchStrategy` contract is
+  kept for custom strategies.
+- **Deprecated:** `ACDebouncedSearchStrategy` — will be removed in 1.0.0; use
+  `ACSearchDebouncer` instead (same `debounce` / `minLength` parameters and
+  identical behaviour — a straight rename). It keeps working and is still
+  exported; it was moved to `lib/src/deprecated/`. Additive change — the search
+  behaviour of the dispatchers is unchanged and no migration is required beyond
+  the optional rename.
 - **Changed:** BEHAVIOR CHANGE — a fresh `ACListDispatcher` / `ACPageDispatcher`
   now reports `hasMore == false` before the first load (was `true`), so
   `hasMore` alone already gates a bottom loader without the extra

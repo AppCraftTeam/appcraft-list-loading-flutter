@@ -86,13 +86,13 @@ final class _IntAccumulatorDispatcher
 _IntAccumulatorDispatcher _buildDispatcher({ACSearchStrategy? searchStrategy}) =>
     _IntAccumulatorDispatcher(
       searchStrategy: searchStrategy ??
-          ACDebouncedSearchStrategy(
+          ACSearchDebouncer(
             debounce: Duration.zero,
             minLength: 0,
           ),
     );
 
-ACSearchStrategy _immediateStrategy() => ACDebouncedSearchStrategy(
+ACSearchStrategy _immediateStrategy() => ACSearchDebouncer(
       debounce: Duration.zero,
       minLength: 0,
     );

@@ -1,40 +1,32 @@
 // ignore_for_file: prefer_const_constructors, cascade_invocations
+import 'package:appcraft_list_loading_flutter/src/ac_search_debouncer.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_search_strategy.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('ACDebouncedSearchStrategy', () {
+  group('ACSearchDebouncer', () {
     group('construction', () {
-      test('defaults: debounce=300ms, minLength=3', () {
+      test('defaults: minLength=3', () {
         // Arrange & Act
-        final strategy = ACDebouncedSearchStrategy();
+        final strategy = ACSearchDebouncer();
 
         // Assert
-        expect(strategy.debounce, equals(const Duration(milliseconds: 300)));
         expect(strategy.minLength, equals(3));
       });
 
-      test('accepts custom debounce and minLength', () {
-        // Arrange
-        const customDebounce = Duration(milliseconds: 750);
-        const customMinLength = 5;
-
-        // Act
-        final strategy = ACDebouncedSearchStrategy(
-          debounce: customDebounce,
-          minLength: customMinLength,
-        );
+      test('accepts a custom minLength', () {
+        // Arrange & Act
+        final strategy = ACSearchDebouncer(minLength: 5);
 
         // Assert
-        expect(strategy.debounce, equals(customDebounce));
-        expect(strategy.minLength, equals(customMinLength));
+        expect(strategy.minLength, equals(5));
       });
 
       test('negative debounce triggers assertion', () {
         // Arrange & Act & Assert
         expect(
-          () => ACDebouncedSearchStrategy(
+          () => ACSearchDebouncer(
             debounce: const Duration(microseconds: -1),
           ),
           throwsA(isA<AssertionError>()),
@@ -44,25 +36,26 @@ void main() {
       test('negative minLength triggers assertion', () {
         // Arrange & Act & Assert
         expect(
-          () => ACDebouncedSearchStrategy(minLength: -1),
+          () => ACSearchDebouncer(minLength: -1),
           throwsA(isA<AssertionError>()),
         );
       });
 
       test('is an ACSearchStrategy', () {
         // Arrange
-        final strategy = ACDebouncedSearchStrategy();
+        final strategy = ACSearchDebouncer();
 
         // Act & Assert
         expect(strategy, isA<ACSearchStrategy>());
       });
     });
 
-    group('schedule: empty / null query', () {
+    // S1 — empty / null query launches immediately and resets last-applied.
+    group('S1: empty / null query', () {
       test('query == null returns an immediately-completing Future', () {
         FakeAsync().run((async) {
           // Arrange
-          final strategy = ACDebouncedSearchStrategy();
+          final strategy = ACSearchDebouncer();
 
           // Act
           final future = strategy.schedule(null);
@@ -80,7 +73,7 @@ void main() {
       test('empty query returns an immediately-completing Future', () {
         FakeAsync().run((async) {
           // Arrange
-          final strategy = ACDebouncedSearchStrategy();
+          final strategy = ACSearchDebouncer();
 
           // Act
           final future = strategy.schedule('');
@@ -94,11 +87,11 @@ void main() {
         });
       });
 
-      test('null-query schedule resets _lastAppliedQuery so a subsequent '
+      test('null-query schedule resets last-applied so a subsequent '
           'valid query is debounced again', () {
         FakeAsync().run((async) {
           // Arrange — prime the strategy by applying 'john' through debounce.
-          final strategy = ACDebouncedSearchStrategy();
+          final strategy = ACSearchDebouncer();
           var firstApplied = false;
           strategy.schedule('john')!.then((_) => firstApplied = true);
           async.elapse(const Duration(milliseconds: 300));
@@ -130,10 +123,11 @@ void main() {
       });
     });
 
-    group('schedule: minLength rejection', () {
+    // S2 — query shorter than minLength is rejected (null return).
+    group('S2: minLength rejection', () {
       test('query shorter than minLength returns null', () {
         // Arrange
-        final strategy = ACDebouncedSearchStrategy();
+        final strategy = ACSearchDebouncer();
 
         // Act
         final future = strategy.schedule('ab');
@@ -145,7 +139,7 @@ void main() {
 
       test('query shorter than custom minLength returns null', () {
         // Arrange
-        final strategy = ACDebouncedSearchStrategy(minLength: 5);
+        final strategy = ACSearchDebouncer(minLength: 5);
 
         // Act
         final future = strategy.schedule('ab');
@@ -157,7 +151,7 @@ void main() {
       test('query at exactly minLength is accepted (boundary)', () {
         FakeAsync().run((async) {
           // Arrange — minLength=3, 'abc' is length 3.
-          final strategy = ACDebouncedSearchStrategy();
+          final strategy = ACSearchDebouncer();
 
           // Act
           final future = strategy.schedule('abc');
@@ -166,20 +160,21 @@ void main() {
           expect(future, isNotNull,
               reason: 'length == minLength must be accepted');
 
-          // Drain any pending debounce so the FakeAsync doesn't complain
-          // about pending timers.
+          // Drain any pending debounce so FakeAsync doesn't complain about
+          // pending timers.
           async.elapse(const Duration(seconds: 1));
           async.flushMicrotasks();
         });
       });
     });
 
+    // S3/S4/S5/S6 — repeated / changed query timing.
     group('schedule: repeated / changed query', () {
-      test('repeating the last-applied query completes immediately '
+      test('S3: repeating the last-applied query completes immediately '
           '(no debounce)', () {
         FakeAsync().run((async) {
           // Arrange — first apply 'john' through debounce.
-          final strategy = ACDebouncedSearchStrategy();
+          final strategy = ACSearchDebouncer();
           var firstApplied = false;
           strategy.schedule('john')!.then((_) => firstApplied = true);
           async.elapse(const Duration(milliseconds: 300));
@@ -197,11 +192,11 @@ void main() {
         });
       });
 
-      test('changed query with length >= minLength waits for the debounce '
+      test('S5: changed query with length >= minLength waits for the debounce '
           'timer before completing', () {
         FakeAsync().run((async) {
           // Arrange
-          final strategy = ACDebouncedSearchStrategy(
+          final strategy = ACSearchDebouncer(
             debounce: const Duration(milliseconds: 300),
           );
 
@@ -223,10 +218,11 @@ void main() {
         });
       });
 
-      test('Duration.zero debounce: changed query completes immediately', () {
+      test('S4: Duration.zero debounce — changed query completes immediately',
+          () {
         FakeAsync().run((async) {
           // Arrange
-          final strategy = ACDebouncedSearchStrategy(
+          final strategy = ACSearchDebouncer(
             debounce: Duration.zero,
           );
 
@@ -240,11 +236,11 @@ void main() {
         });
       });
 
-      test('schedule twice within debounce window: first timer is cancelled, '
-          'only second completes', () {
+      test('S6: schedule twice within debounce window — first timer is '
+          'cancelled via the shared debouncer, only second completes', () {
         FakeAsync().run((async) {
           // Arrange
-          final strategy = ACDebouncedSearchStrategy(
+          final strategy = ACSearchDebouncer(
             debounce: const Duration(milliseconds: 300),
           );
 
@@ -257,15 +253,14 @@ void main() {
           var secondApplied = false;
           strategy.schedule('john')!.then((_) => secondApplied = true);
 
-          // Elapse enough time for the FIRST timer's original 300ms budget
+          // Elapse enough for the FIRST timer's original 300ms budget
           // (total 400ms) — but the first timer was cancelled, so still
           // nothing completes.
           async.elapse(const Duration(milliseconds: 200));
           async.flushMicrotasks();
 
-          // Assert — neither has fired yet because the second timer's 300ms
-          // started at t=100ms; now we're at t=300ms; second timer elapses
-          // at t=400ms.
+          // Assert — the second timer's 300ms started at t=100ms; now at
+          // t=300ms it elapses at t=400ms.
           expect(firstApplied, isFalse,
               reason: 'superseded first timer must be cancelled');
           expect(secondApplied, isFalse,
@@ -286,7 +281,7 @@ void main() {
           'debounced', () {
         FakeAsync().run((async) {
           // Arrange
-          final strategy = ACDebouncedSearchStrategy();
+          final strategy = ACSearchDebouncer();
 
           // Act 1 — short query returns null (rejected).
           final rejected = strategy.schedule('ab');
@@ -308,11 +303,12 @@ void main() {
       });
     });
 
-    group('cancel', () {
+    // S7 — cancel / dispose delegate to the shared debouncer.
+    group('S7: cancel', () {
       test('cancel() cancels a pending timer: future never completes', () {
         FakeAsync().run((async) {
           // Arrange
-          final strategy = ACDebouncedSearchStrategy();
+          final strategy = ACSearchDebouncer();
           var applied = false;
           strategy.schedule('john')!.then((_) => applied = true);
           async.elapse(const Duration(milliseconds: 100));
@@ -325,14 +321,13 @@ void main() {
           async.flushMicrotasks();
 
           // Assert — future never completed.
-          expect(applied, isFalse,
-              reason: 'cancelled timer must not fire');
+          expect(applied, isFalse, reason: 'cancelled timer must not fire');
         });
       });
 
       test('cancel() with no pending timer is a safe no-op', () {
         // Arrange
-        final strategy = ACDebouncedSearchStrategy();
+        final strategy = ACSearchDebouncer();
 
         // Act & Assert — must not throw.
         expect(strategy.cancel, returnsNormally);
@@ -340,11 +335,11 @@ void main() {
       });
     });
 
-    group('dispose', () {
+    group('S7: dispose', () {
       test('dispose() cancels a pending timer: future never completes', () {
         FakeAsync().run((async) {
           // Arrange
-          final strategy = ACDebouncedSearchStrategy();
+          final strategy = ACSearchDebouncer();
           var applied = false;
           strategy.schedule('john')!.then((_) => applied = true);
           async.elapse(const Duration(milliseconds: 100));
@@ -364,7 +359,7 @@ void main() {
 
       test('dispose() is safe on a freshly constructed strategy', () {
         // Arrange
-        final strategy = ACDebouncedSearchStrategy();
+        final strategy = ACSearchDebouncer();
 
         // Act & Assert
         expect(strategy.dispose, returnsNormally);

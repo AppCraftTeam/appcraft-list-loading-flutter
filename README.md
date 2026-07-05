@@ -22,7 +22,10 @@ without imposing any specific state-management library (both dispatchers extend
 - Cursor pagination via a custom `cursor` field on your params class +
   `ACPageDispatcher` + an `ACPage` DTO. Use
   `dispatcher.lastResult?.<your_cursor_field>` to feed the next `loadMore`.
-- Debounced search with `minLength` via `ACDebouncedSearchStrategy`.
+- Debounced search with `minLength` via the default `ACSearchDebouncer`
+  (composed on top of `ACDebouncer`), or your own `ACSearchStrategy`.
+- A standalone, action-neutral `ACDebouncer` for debouncing any action
+  (read-tracking, autosave, analytics throttling, ...) — no manual `Timer`.
 - Cancellation strategies: the `ACCancelStrategy` contract and a ready
   `ACOperationCancelStrategy` implementation on top of `package:async`.
 - Integration with `ChangeNotifier` — subscribe via `ListenableBuilder`,
@@ -228,7 +231,13 @@ realtime / optimistic / seed writes (a single batched notification) and a
 manual `hasMore` setter — with the same rules as `ACListDispatcher`. See
 [Manual list control](#manual-list-control--mutate--hasmore).
 
-### 3. Debounced search — `ACDebouncedSearchStrategy`
+### 3. Debounced search — `ACSearchDebouncer`
+
+`ACSearchDebouncer` is the **default** search strategy on both dispatchers
+(a fresh dispatcher already debounces search with `debounce: 300ms`,
+`minLength: 3`), so you only pass one to tweak the timing or gating. It is
+built on top of the general-purpose `ACDebouncer` (see below) but its search
+behaviour is unchanged from before.
 
 The search strategy applies only in `reload`: for a query shorter than
 `minLength` items are cleared, for a changed query loading starts after
@@ -238,7 +247,7 @@ The search strategy applies only in `reload`: for a query shorter than
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
 
 final dispatcher = ACListDispatcher<UserListParams, User>(
-  searchStrategy: ACDebouncedSearchStrategy(
+  searchStrategy: ACSearchDebouncer(
     debounce: const Duration(milliseconds: 400),
     minLength: 2,
   ),
@@ -254,7 +263,63 @@ void onQueryChanged(String query) {
 }
 ```
 
-### 4. Custom cancel strategy — `ACCancelStrategy`
+> **Migration note:** `ACDebouncedSearchStrategy` is deprecated and will be
+> removed in `1.0.0`. Replace it with `ACSearchDebouncer` — same `debounce` /
+> `minLength` parameters and identical behaviour, it is a straight rename. The
+> `ACSearchStrategy` contract stays for custom strategies. See the
+> [API Reference](#api-reference).
+
+For a fully custom search behaviour, implement `ACSearchStrategy` yourself and
+pass it as `searchStrategy` — for example an instant, no-debounce strategy:
+
+```dart
+final class InstantSearch implements ACSearchStrategy {
+  @override
+  Future<void>? schedule(String? query) => Future<void>.value();
+  @override
+  void cancel() {}
+  @override
+  void dispose() {}
+}
+
+final dispatcher =
+    ACListDispatcher<UserListParams, User>(searchStrategy: InstantSearch());
+```
+
+### 4. Debouncing any action — `ACDebouncer`
+
+`ACSearchDebouncer` handles search timing, but the underlying `ACDebouncer` is
+exposed as a standalone, action-neutral utility for debouncing **any**
+`void Function()` — read-tracking, resize handling, draft autosave, analytics
+throttling — without wiring up a manual `Timer`. It is trailing-edge: each
+`run` cancels the previously scheduled action and re-arms, so only the **last**
+action within the `duration` window fires.
+
+```dart
+import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
+
+final _readDebouncer = ACDebouncer(const Duration(milliseconds: 400));
+
+// A frequent stream — e.g. "a message scrolled into view":
+void onMessageVisible(Message m) =>
+    _readDebouncer.run(() => api.markRead(m.id));
+// Only the last id within 400ms reaches the API.
+
+@override
+void dispose() {
+  _readDebouncer.dispose(); // required — otherwise a pending Timer may
+  super.dispose();          // fire the action after dispose
+}
+```
+
+- `duration` defaults to `300ms` and must be non-negative; `Duration.zero`
+  schedules the action on the next event-loop tick.
+- `isActive` reports whether an action is currently pending; `cancel()` drops
+  the pending action without running it.
+- `dispose()` is **mandatory** — it cancels the pending timer so a deferred
+  action never fires after teardown. It is equivalent to `cancel()`.
+
+### 5. Custom cancel strategy — `ACCancelStrategy`
 
 If you need to integrate with your own cancellation system (for example a
 `Dio` `CancelToken`), implement `ACCancelStrategy` and pass an instance to
@@ -300,7 +365,7 @@ await dispatcher.reload(
 );
 ```
 
-### 5. Reactive loading indicator — `loadingListenable`
+### 6. Reactive loading indicator — `loadingListenable`
 
 Both dispatchers extend `ChangeNotifier`, but `notifyListeners()` fires only
 when `items` change — a change of `isLoading` alone does not wake listeners.
@@ -356,7 +421,7 @@ flags are read synchronously; there is no separate `ValueListenable` for them
 the base `ACLoadingDispatcher`, so `ACListDispatcher`, `ACPageDispatcher` and
 third-party subclasses get it for free.
 
-### 6. Built-in error state — `lastError` / `errorListenable` / `retry()`
+### 7. Built-in error state — `lastError` / `errorListenable` / `retry()`
 
 A failing `load` still **throws** — your `try/catch` around `reload` / `loadMore`
 keeps working exactly as before. On top of that the engine now records the
@@ -451,7 +516,7 @@ Open classes:
 - `ACListDispatcher`
 - `ACPageDispatcher`
 - `ACLoadingDispatcher` (abstract — the shared loading engine, see below)
-- `ACDebouncedSearchStrategy`
+- `ACSearchDebouncer`
 - `ACOperationCancelStrategy`
 
 The former parser-based extension points — the abstract `ACDispatcher` /
@@ -577,9 +642,11 @@ it from the hooks only when the collection actually changes.
 - `ACParamsMixin` — base parameters mixin (`limit`, `query`).
 - `ACOffsetParamsMixin` — offset pagination mixin (`offset`).
 - `ACSearchStrategy` — search strategy contract (`schedule`, `cancel`,
-  `dispose`).
-- `ACDebouncedSearchStrategy` — search strategy implementation with
-  debounce and `minLength`.
+  `dispose`); implement it for a fully custom search behaviour.
+- `ACSearchDebouncer` — default search strategy implementation with
+  `debounce` and `minLength`, composed on top of `ACDebouncer`.
+- `ACDebouncer` — standalone, action-neutral debounce utility (`run`,
+  `isActive`, `cancel`, `dispose`) for deferring any `void Function()`.
 - `ACCancelStrategy` — cancellation strategy contract (`run`, `cancel`,
   `isActive`).
 - `ACOperationCancelStrategy` — cancellation implementation on top of
@@ -599,6 +666,9 @@ it from the hooks only when the collection actually changes.
   `ACPageDispatcher`.
 - `ACDefaultDispatcher<P, T>` / `ACDefaultParser<P, T>` — replaced by
   `ACListDispatcher` (identical public contract).
+- `ACDebouncedSearchStrategy` — replaced by `ACSearchDebouncer` (same
+  `debounce` / `minLength` parameters and behaviour); moved to
+  `lib/src/deprecated/`.
 
 Detailed documentation is available in the dartdoc on pub.dev.
 
