@@ -84,6 +84,31 @@ await dispatcher.loadMore(
 );
 ```
 
+#### Before the first load — `hasMore == false`
+
+A fresh dispatcher reports `hasMore == false` until the first load happens, so
+`hasMore` alone already means "there is a loaded page and it may have more":
+
+```dart
+final dispatcher = ACListDispatcher<UserListParams, User>();
+print(dispatcher.hasMore); // false (before any reload)
+
+// No extra gate is needed — this used to require `lastResult != null && hasMore`:
+if (dispatcher.hasMore) const BottomLoader(); // won't show before the first load
+```
+
+Consequently `loadMore()` before the first `reload` is a no-op (the
+`hasMore == false` guard). Use `reload` to perform the first load, or
+`loadMore(force: true)` to bypass the guard explicitly:
+
+```dart
+await dispatcher.loadMore(params: p, load: api.fetch);              // no-op (hasMore == false)
+await dispatcher.loadMore(params: p, load: api.fetch, force: true); // loads (bypasses the guard)
+```
+
+After the first `reload` the value is computed as before (offset rule /
+`page.hasMore`) — the post-load computation is unchanged.
+
 #### Forcing a load past the end — `loadMore(force: true)`
 
 Reached the end (`hasMore == false`) but new items may have appeared upstream

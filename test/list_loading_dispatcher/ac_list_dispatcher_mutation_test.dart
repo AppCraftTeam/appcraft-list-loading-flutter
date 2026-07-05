@@ -213,14 +213,14 @@ void main() {
     });
 
     test('setter updates the getter', () {
-      // Arrange — fresh dispatcher reports hasMore=true.
-      expect(dispatcher.hasMore, isTrue);
+      // Arrange — fresh dispatcher reports hasMore=false.
+      expect(dispatcher.hasMore, isFalse);
 
       // Act
-      dispatcher.hasMore = false;
+      dispatcher.hasMore = true;
 
       // Assert
-      expect(dispatcher.hasMore, isFalse);
+      expect(dispatcher.hasMore, isTrue);
     });
 
     test('setter does not notify listeners', () {
@@ -305,8 +305,9 @@ void main() {
 
     test('loadMore after mutate appends to the manually mutated list',
         () async {
-      // Arrange — seed a manual item; hasMore stays true.
+      // Arrange — seed a manual item; enable loadMore (fresh default is false).
       dispatcher.mutate((items) => items.add(99));
+      dispatcher.hasMore = true;
       loader.enqueueValue(<int>[1]);
 
       // Act
