@@ -1,7 +1,7 @@
 import 'ac_loading_dispatcher.dart';
 import 'ac_page.dart';
 import 'ac_params.dart';
-import 'ac_search_strategy.dart';
+import 'ac_search_debouncer.dart';
 
 /// Self-contained dispatcher for page-model pagination over a plain
 /// `List<T>`.
@@ -47,7 +47,7 @@ class ACPageDispatcher<P extends ACParamsMixin, R extends ACPage<T>, T>
     extends ACLoadingDispatcher<P, R> {
   /// Creates a dispatcher with an optional [searchStrategy].
   ///
-  /// If [searchStrategy] is not provided, an [ACDebouncedSearchStrategy]
+  /// If [searchStrategy] is not provided, an [ACSearchDebouncer]
   /// with defaults is used (debounce `300ms`, `minLength = 3`). The
   /// strategy is set once and does not change afterwards.
   ACPageDispatcher({

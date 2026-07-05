@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'ac_cancel_strategy.dart';
 import 'ac_dispatcher_operation.dart';
 import 'ac_params.dart';
+import 'ac_search_debouncer.dart';
 import 'ac_search_strategy.dart';
 
 /// Shared loading engine for paginated dispatchers.
@@ -36,12 +37,12 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     extends ChangeNotifier {
   /// Creates a dispatcher with an optional [searchStrategy].
   ///
-  /// If [searchStrategy] is not provided, an [ACDebouncedSearchStrategy]
+  /// If [searchStrategy] is not provided, an [ACSearchDebouncer]
   /// with defaults is used (debounce `300ms`, `minLength = 3`). The
   /// strategy is set once and does not change afterwards.
   ACLoadingDispatcher({
     ACSearchStrategy? searchStrategy,
-  }) : searchStrategy = searchStrategy ?? ACDebouncedSearchStrategy();
+  }) : searchStrategy = searchStrategy ?? ACSearchDebouncer();
 
   /// Search behaviour strategy applied in [reload].
   final ACSearchStrategy searchStrategy;

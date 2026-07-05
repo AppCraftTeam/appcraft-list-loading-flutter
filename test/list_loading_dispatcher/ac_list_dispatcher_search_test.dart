@@ -1,6 +1,7 @@
 // ignore_for_file: cascade_invocations, unused_element_parameter, prefer_const_constructors
 import 'package:appcraft_list_loading_flutter/src/ac_list_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_search_debouncer.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_search_strategy.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,16 +29,14 @@ ACListDispatcher<_TestParams, int> _buildDispatcher({
 
 void main() {
   group('ACListDispatcher — default search strategy (US2)', () {
-    test('default strategy is ACDebouncedSearchStrategy (300ms / minLength 3)',
-        () {
+    test('default strategy is ACSearchDebouncer (minLength 3)', () {
       // Arrange & Act
       final dispatcher = _buildDispatcher();
 
       // Assert
       final strategy = dispatcher.searchStrategy;
-      expect(strategy, isA<ACDebouncedSearchStrategy>());
-      final debounced = strategy as ACDebouncedSearchStrategy;
-      expect(debounced.debounce, equals(const Duration(milliseconds: 300)));
+      expect(strategy, isA<ACSearchDebouncer>());
+      final debounced = strategy as ACSearchDebouncer;
       expect(debounced.minLength, equals(3));
 
       dispatcher.dispose();
@@ -45,7 +44,7 @@ void main() {
 
     test('custom strategy passed to the constructor is used verbatim', () {
       // Arrange
-      final custom = ACDebouncedSearchStrategy(
+      final custom = ACSearchDebouncer(
         debounce: const Duration(milliseconds: 50),
         minLength: 1,
       );
@@ -306,7 +305,7 @@ void main() {
       FakeAsync().run((async) {
         // Arrange — custom strategy with zero debounce, minLength 1.
         final dispatcher = _buildDispatcher(
-          searchStrategy: ACDebouncedSearchStrategy(
+          searchStrategy: ACSearchDebouncer(
             debounce: Duration.zero,
             minLength: 1,
           ),

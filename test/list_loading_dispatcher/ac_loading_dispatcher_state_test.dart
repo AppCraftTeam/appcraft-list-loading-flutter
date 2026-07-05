@@ -5,6 +5,7 @@ import 'package:appcraft_list_loading_flutter/src/ac_loading_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_page.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_page_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
+import 'package:appcraft_list_loading_flutter/src/ac_search_debouncer.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_search_strategy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,7 +77,7 @@ final class _IntAccumulatorDispatcher
 _IntAccumulatorDispatcher _buildDispatcher({ACSearchStrategy? searchStrategy}) =>
     _IntAccumulatorDispatcher(
       searchStrategy: searchStrategy ??
-          ACDebouncedSearchStrategy(
+          ACSearchDebouncer(
             debounce: Duration.zero,
             minLength: 0,
           ),
@@ -283,7 +284,7 @@ void main() {
         () async {
       // Arrange — a real minLength gate; a short query is rejected.
       final dispatcher = _buildDispatcher(
-        searchStrategy: ACDebouncedSearchStrategy(minLength: 3),
+        searchStrategy: ACSearchDebouncer(minLength: 3),
       );
       final recorded = _recordLoading(dispatcher);
       final loader = FakeLoader<List<int>>();
@@ -380,7 +381,7 @@ void main() {
     test('acPageDispatcher_inheritsLoadingListenableAndPhaseFlags', () async {
       // Arrange — the real page dispatcher, freshly built.
       final dispatcher = ACPageDispatcher<_TestParams, _FakePage<int>, int>(
-        searchStrategy: ACDebouncedSearchStrategy(
+        searchStrategy: ACSearchDebouncer(
           debounce: Duration.zero,
           minLength: 0,
         ),

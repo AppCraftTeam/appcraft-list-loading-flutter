@@ -24,7 +24,7 @@ class HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _dispatcher = ACListDispatcher<_DemoParams, String>(
-      searchStrategy: ACDebouncedSearchStrategy(
+      searchStrategy: ACSearchDebouncer(
         debounce: const Duration(milliseconds: 300),
         minLength: 2,
       ),
