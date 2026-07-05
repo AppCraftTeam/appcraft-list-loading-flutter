@@ -254,6 +254,62 @@ await dispatcher.reload(
 );
 ```
 
+### 5. Reactive loading indicator — `loadingListenable`
+
+Both dispatchers extend `ChangeNotifier`, but `notifyListeners()` fires only
+when `items` change — a change of `isLoading` alone does not wake listeners.
+To drive a spinner reactively (without manual `setState` and without
+subscribing to the list) use `loadingListenable` — a `ValueListenable<bool>`
+that mirrors the overall `isLoading` flag, notifies on every `false ↔ true`
+transition and deduplicates equal values.
+
+```dart
+// In a widget — no setState:
+ValueListenableBuilder<bool>(
+  valueListenable: dispatcher.loadingListenable,
+  builder: (_, isLoading, __) => isLoading
+      ? const LinearProgressIndicator()
+      : const SizedBox.shrink(),
+);
+
+// In a Cubit/Bloc — where setState is unavailable:
+dispatcher.loadingListenable.addListener(() {
+  emit(state.copyWith(isLoading: dispatcher.isLoading));
+});
+```
+
+`loadingListenable` is independent of list changes — you no longer subscribe
+to the list just to move a spinner.
+
+#### Telling `reload` apart from `loadMore` — `isReloading` / `isLoadingMore`
+
+To render distinct indicators — a full-screen spinner during `reload` versus a
+"loading more" spinner at the bottom during `loadMore` — read the two granular
+flags synchronously:
+
+```dart
+Widget build(BuildContext context) {
+  return Column(children: [
+    if (dispatcher.isReloading) const FullScreenSpinner(),   // reload in flight
+    Expanded(child: ListView(/* dispatcher.items */)),
+    if (dispatcher.isLoadingMore) const BottomSpinner(),     // loadMore in flight
+  ]);
+}
+```
+
+- `isReloading` — `true` while a `reload` is in flight.
+- `isLoadingMore` — `true` while a `loadMore` is in flight.
+- During any active load exactly one granular flag is `true`; starting a
+  `reload` while a `loadMore` runs switches to `isReloading` without the
+  overall `isLoading` flickering to `false`.
+
+Compatibility: `isLoading` is unchanged — it is now the derived
+`isReloading || isLoadingMore`, so existing code keeps working. The granular
+flags are read synchronously; there is no separate `ValueListenable` for them
+(the reactive channel is on the overall `isLoading` only). Everything lives in
+the base `ACLoadingDispatcher`, so `ACListDispatcher`, `ACPageDispatcher` and
+third-party subclasses get it for free.
+
 ## Extending the API
 
 The recommended extension points are the self-contained dispatchers
@@ -299,7 +355,8 @@ class' API docs. In particular, `ACListDispatcher` extends
 Both dispatchers are thin subclasses of one abstract engine,
 `ACLoadingDispatcher<Params, T>`. The engine owns the whole loading
 lifecycle — search scheduling, cancellation of a previous load, staleness
-guards, the `isLoading` flag and the typed `lastResult` — behind
+guards, the `isLoading` flag (with the granular `isReloading` / `isLoadingMore`
+and the reactive `loadingListenable`) and the typed `lastResult` — behind
 `reload` / `loadMore` / `cancel` / `dispose`. A subclass supplies only the
 collection state and three hooks: `hasMore`, `onLoadSuccess` and
 `onLoadRejected`.
@@ -375,7 +432,10 @@ it from the hooks only when the collection actually changes.
   both dispatchers. Owns the loading lifecycle (`reload`, `loadMore`,
   `cancel`, `dispose`, `isLoading`, `lastResult`); subclasses provide the
   collection state and the `hasMore` / `onLoadSuccess` / `onLoadRejected`
-  hooks. Public extension point for non-standard pagination.
+  hooks. Public extension point for non-standard pagination. Also exposes
+  `loadingListenable` (a `ValueListenable<bool>` mirroring `isLoading` for
+  reactive spinners) and the synchronous granular flags `isReloading` /
+  `isLoadingMore` — inherited by both dispatchers.
 - `ACPage<T>` — page-model contract mixin (`items`, `hasMore`).
 - `ACParamsMixin` — base parameters mixin (`limit`, `query`).
 - `ACOffsetParamsMixin` — offset pagination mixin (`offset`).
