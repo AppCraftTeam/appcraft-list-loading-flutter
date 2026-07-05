@@ -15,6 +15,18 @@ Template for future CHANGELOG.md entries:
 
 ## draft
 
+- **Changed:** BEHAVIOR CHANGE — a fresh `ACListDispatcher` / `ACPageDispatcher`
+  now reports `hasMore == false` before the first load (was `true`), so
+  `hasMore` alone already gates a bottom loader without the extra
+  `lastResult != null && hasMore` check. As a result, `loadMore()` before the
+  first `reload` is a no-op (the `hasMore == false` guard) — use `reload` for
+  the first load, or `loadMore(force: true)` to force it (`force` still bypasses
+  the `hasMore == false` guard, now including this initial state). The `hasMore`
+  computation after a load is unchanged (offset rule / `page.hasMore`), and the
+  `hasMore` setter and `minLength` are unaffected. Migration: if you relied on a
+  fresh dispatcher reporting `hasMore == true` (e.g. calling `loadMore` first),
+  switch to `reload` or `loadMore(force: true)`. Deprecated dispatchers are not
+  affected.
 - **Added:** built-in error state on `ACLoadingDispatcher` — `Object? lastError`
   (the last thrown object, read synchronously) and
   `ValueListenable<Object?> errorListenable` (its reactive channel, deduplicated

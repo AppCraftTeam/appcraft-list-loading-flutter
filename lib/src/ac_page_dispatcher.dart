@@ -55,7 +55,7 @@ class ACPageDispatcher<P extends ACParamsMixin, R extends ACPage<T>, T>
   });
 
   final List<T> _items = <T>[];
-  bool _hasMore = true;
+  bool _hasMore = false;
 
   /// Unmodifiable view of the accumulated items.
   ///
@@ -64,6 +64,11 @@ class ACPageDispatcher<P extends ACParamsMixin, R extends ACPage<T>, T>
   List<T> get items => List<T>.unmodifiable(_items);
 
   /// Whether there are more items to load via [loadMore].
+  ///
+  /// Before the first load completes this is `false`: a fresh dispatcher
+  /// reports no further pages until something has actually been loaded.
+  /// After a load it is read directly from the page model
+  /// (`result.hasMore`).
   ///
   /// Read synchronously; `notifyListeners` is **not** invoked when this
   /// flag changes without a change in [items].

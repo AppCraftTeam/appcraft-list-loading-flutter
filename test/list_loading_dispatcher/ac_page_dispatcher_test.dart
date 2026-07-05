@@ -66,10 +66,9 @@ void main() {
       expect(dispatcher.isLoading, isFalse);
     });
 
-    test('fresh dispatcher reports hasMore=true (parity, before first load)',
-        () {
+    test('fresh dispatcher reports hasMore=false (before first load)', () {
       // Arrange & Act & Assert
-      expect(dispatcher.hasMore, isTrue);
+      expect(dispatcher.hasMore, isFalse);
     });
 
     test('is a ChangeNotifier / Listenable', () {
