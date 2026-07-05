@@ -203,14 +203,22 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
   /// [cancelStrategy] — an optional cancellation strategy specifically for
   /// this load. Priority: argument -> a new [ACOperationCancelStrategy] for
   /// each call.
+  ///
+  /// [force] — when `true`, bypasses **only** the [hasMore] `== false` guard,
+  /// forcing a load even when the subclass reports no more pages. The other
+  /// guards are preserved: the call is still ignored while another load is in
+  /// progress (`isLoading == true`) or after [dispose]. The flag is one-shot —
+  /// it affects only the current call and is not stored; after a successful
+  /// load [hasMore] is recomputed as usual by the subclass.
   Future<void> loadMore({
     required Params params,
     required Future<T> Function(Params params) load,
     ACCancelStrategy? cancelStrategy,
+    bool force = false,
   }) async {
     if (_disposed) return;
     if (isLoading) return;
-    if (!hasMore) return;
+    if (!force && !hasMore) return;
 
     await runLoad(
       params: params,
