@@ -15,6 +15,27 @@ Template for future CHANGELOG.md entries:
 
 ## draft
 
+- **Added:** built-in error state on `ACLoadingDispatcher` — `Object? lastError`
+  (the last thrown object, read synchronously) and
+  `ValueListenable<Object?> errorListenable` (its reactive channel, deduplicated
+  by value and released in `dispose`). A failing `load` still **propagates** the
+  exception exactly as before — the error state is additive, so existing
+  `try/catch` around `reload` / `loadMore` keeps working. The error clears on
+  the next successful load, and changing `lastError` does not fire
+  `notifyListeners()`.
+- **Added:** `Future<void> retry()` on `ACLoadingDispatcher` — repeats the last
+  operation (`reload` or `loadMore`) through the public methods with the
+  original `params` / `load` and, for `loadMore`, the original `force`. A no-op
+  when there is no prior operation or after `dispose`.
+- **Added:** read-only `ACDispatcherOperation<Params, T>? lastOperation` on
+  `ACLoadingDispatcher` for introspecting the captured operation, plus the new
+  public sealed model `ACDispatcherOperation` with the variants
+  `ACReloadOperation` and `ACLoadMoreOperation` (the latter carrying `force`);
+  both expose the common `params` and `load`. An exhaustive `switch` needs no
+  default clause.
+- All of the above live in the base `ACLoadingDispatcher`, so `ACListDispatcher`,
+  `ACPageDispatcher` and third-party subclasses inherit them. Additive only —
+  the exception propagation is unchanged (no breaking changes, no migration).
 - **Added:** optional `bool force` parameter (default `false`) on
   `ACLoadingDispatcher.loadMore` — force a load past the end of the list by
   bypassing **only** the `hasMore == false` guard, without a full `reload` and

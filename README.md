@@ -331,6 +331,89 @@ flags are read synchronously; there is no separate `ValueListenable` for them
 the base `ACLoadingDispatcher`, so `ACListDispatcher`, `ACPageDispatcher` and
 third-party subclasses get it for free.
 
+### 6. Built-in error state — `lastError` / `errorListenable` / `retry()`
+
+A failing `load` still **throws** — your `try/catch` around `reload` / `loadMore`
+keeps working exactly as before. On top of that the engine now records the
+error so a widget can render a "spinner / error / list" state without wiring up
+its own error plumbing: `lastError` exposes the last thrown object
+synchronously and `errorListenable` (a `ValueListenable<Object?>`) is the
+reactive channel. The error clears automatically on the next successful load.
+
+Combine `loadingListenable` and `errorListenable` to drive the three states
+from one builder:
+
+```dart
+// In a widget — reactive, combining loading + error:
+AnimatedBuilder(
+  animation: Listenable.merge([dispatcher.loadingListenable, dispatcher.errorListenable]),
+  builder: (context, _) {
+    if (dispatcher.isLoading) return const CircularProgressIndicator();
+    final error = dispatcher.lastError;
+    if (error != null) {
+      return Column(children: [
+        Text('Error: $error'),
+        ElevatedButton(onPressed: dispatcher.retry, child: const Text('Retry')),
+      ]);
+    }
+    return MyList(items: dispatcher.items);
+  },
+);
+
+// In a Cubit/Bloc:
+dispatcher.errorListenable.addListener(() {
+  emit(state.copyWith(error: dispatcher.lastError));
+});
+```
+
+- `lastError` — synchronous; `errorListenable` — reactive, deduplicated by
+  value.
+- The exception is still **propagated** — `lastError` / `errorListenable` are
+  additive, not a replacement for `try/catch`.
+- Changing `lastError` does not fire `notifyListeners()` — the reactive channel
+  is `errorListenable` only.
+
+#### Repeating the last operation — `retry()`
+
+`retry()` re-runs the last operation (`reload` or `loadMore`) through the public
+methods, with the original `params`, `load` and — for `loadMore` — the original
+`force`, so you do not have to remember the arguments at the call site:
+
+```dart
+try {
+  await dispatcher.loadMore(params: p, load: api.fetch, force: true);
+} catch (_) {
+  // later, on a button tap:
+  await dispatcher.retry();   // repeats loadMore with force: true and the same params/load
+}
+```
+
+- A fresh `cancelStrategy` is used; if you need a custom one, call
+  `reload` / `loadMore` directly.
+- With no prior operation, or after `dispose`, `retry()` is a no-op.
+
+#### Introspecting the last operation — `lastOperation`
+
+`lastOperation` gives read-only access to the captured operation as a `sealed`
+`ACDispatcherOperation`, so an exhaustive `switch` needs no default clause:
+
+```dart
+switch (dispatcher.lastOperation) {
+  case null:
+    label = 'No operation yet';
+  case ACReloadOperation():
+    label = 'Retry load';
+  case ACLoadMoreOperation(:final force):
+    label = force ? 'Retry forced load-more' : 'Load more';
+}
+```
+
+The variants are `ACReloadOperation` and `ACLoadMoreOperation` (carrying
+`force`); both expose the common `params` and `load`.
+
+Everything lives in the base `ACLoadingDispatcher`, so `ACListDispatcher`,
+`ACPageDispatcher` and third-party subclasses inherit it.
+
 ## Extending the API
 
 The recommended extension points are the self-contained dispatchers
@@ -377,10 +460,11 @@ Both dispatchers are thin subclasses of one abstract engine,
 `ACLoadingDispatcher<Params, T>`. The engine owns the whole loading
 lifecycle — search scheduling, cancellation of a previous load, staleness
 guards, the `isLoading` flag (with the granular `isReloading` / `isLoadingMore`
-and the reactive `loadingListenable`) and the typed `lastResult` — behind
-`reload` / `loadMore` / `cancel` / `dispose`. A subclass supplies only the
-collection state and three hooks: `hasMore`, `onLoadSuccess` and
-`onLoadRejected`.
+and the reactive `loadingListenable`), the built-in error state
+(`lastError` / `errorListenable`) with `retry()` / `lastOperation`, and the
+typed `lastResult` — behind `reload` / `loadMore` / `cancel` / `dispose`. A
+subclass supplies only the collection state and three hooks: `hasMore`,
+`onLoadSuccess` and `onLoadRejected`.
 
 > This is an internal refactor: `ACListDispatcher` and `ACPageDispatcher`
 > now share this base, but their public API and behaviour are unchanged —
@@ -456,7 +540,14 @@ it from the hooks only when the collection actually changes.
   hooks. Public extension point for non-standard pagination. Also exposes
   `loadingListenable` (a `ValueListenable<bool>` mirroring `isLoading` for
   reactive spinners) and the synchronous granular flags `isReloading` /
-  `isLoadingMore` — inherited by both dispatchers.
+  `isLoadingMore`, plus the built-in error state — `lastError` (synchronous),
+  `errorListenable` (a `ValueListenable<Object?>`), `retry()` (repeat the last
+  operation) and `lastOperation` (introspection) — inherited by both
+  dispatchers.
+- `ACDispatcherOperation<Params, T>` — sealed model of the last operation
+  captured for `retry()` / `lastOperation`, with the variants
+  `ACReloadOperation` and `ACLoadMoreOperation` (the latter carrying `force`);
+  both expose the common `params` and `load`.
 - `ACPage<T>` — page-model contract mixin (`items`, `hasMore`).
 - `ACParamsMixin` — base parameters mixin (`limit`, `query`).
 - `ACOffsetParamsMixin` — offset pagination mixin (`offset`).
