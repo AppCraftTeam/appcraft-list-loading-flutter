@@ -15,6 +15,15 @@ Template for future CHANGELOG.md entries:
 
 ## draft
 
+- **Added:** optional `bool force` parameter (default `false`) on
+  `ACLoadingDispatcher.loadMore` — force a load past the end of the list by
+  bypassing **only** the `hasMore == false` guard, without a full `reload` and
+  without losing the accumulated list. It is one-shot (`hasMore` is recomputed
+  after a successful load) and keeps every other guard: `force` has no effect
+  during an active load or after `dispose`. Additive only — the default `false`
+  preserves the previous behaviour, no breaking changes and no migration. Lives
+  in the base `ACLoadingDispatcher`, so `ACListDispatcher`, `ACPageDispatcher`
+  and third-party subclasses inherit it.
 - **Added:** public `ValueListenable<bool> loadingListenable` on
   `ACLoadingDispatcher` — a reactive channel that mirrors the overall
   `isLoading` flag, notifying on every `false ↔ true` transition (deduplicated

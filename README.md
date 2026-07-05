@@ -84,6 +84,27 @@ await dispatcher.loadMore(
 );
 ```
 
+#### Forcing a load past the end — `loadMore(force: true)`
+
+Reached the end (`hasMore == false`) but new items may have appeared upstream
+(for example after posting a message) and you want to pull them in without a
+full `reload` and without losing the accumulated list? Pass `force: true`:
+
+```dart
+if (dispatcher.hasMore) {
+  await dispatcher.loadMore(params: nextParams, load: api.fetch);              // as usual
+} else {
+  await dispatcher.loadMore(params: nextParams, load: api.fetch, force: true); // pull anyway
+}
+```
+
+- `force: true` bypasses **only** the `hasMore == false` check; it is one-shot —
+  after a successful load `hasMore` is recomputed as usual.
+- The other guards are kept: during an active load and after `dispose` it is a
+  no-op, and `isLoadingMore` is `true` while it runs (like a normal `loadMore`).
+- Without `force` (or `force: false`) the behaviour is unchanged. It lives in
+  the base `ACLoadingDispatcher`, so both dispatchers and subclasses inherit it.
+
 #### Manual list control — `mutate` & `hasMore`
 
 For live feeds (realtime append, optimistic update, seed) you can change the
