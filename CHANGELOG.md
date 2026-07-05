@@ -15,6 +15,22 @@ Template for future CHANGELOG.md entries:
 
 ## draft
 
+- **Added:** public `ValueListenable<bool> loadingListenable` on
+  `ACLoadingDispatcher` — a reactive channel that mirrors the overall
+  `isLoading` flag, notifying on every `false ↔ true` transition (deduplicated
+  by value). Drive a spinner reactively via `ValueListenableBuilder` or an
+  `addListener` in a Cubit/Bloc, without manual `setState` and without
+  subscribing to list changes. Released in `dispose`.
+- **Added:** public synchronous flags `bool isReloading` and
+  `bool isLoadingMore` on `ACLoadingDispatcher` — tell a `reload` (full-screen
+  spinner) apart from a `loadMore` (bottom spinner). Exactly one is `true`
+  during an active load; both are `false` otherwise. `isLoading` is now the
+  derived `isReloading || isLoadingMore`, so its semantics are unchanged.
+- All of the above live in the base `ACLoadingDispatcher`, so `ACListDispatcher`,
+  `ACPageDispatcher` and third-party subclasses inherit them. Additive only —
+  `isLoading` is unchanged and no existing behaviour changes (no breaking
+  changes, no migration; there is no separate listenable for the granular
+  flags).
 - **Added:** new public abstract `ACLoadingDispatcher<Params extends ACParamsMixin, T>`
   — the shared loading engine that owns the whole lifecycle (search
   scheduling, cancellation of a previous load, staleness guards, the

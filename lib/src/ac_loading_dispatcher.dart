@@ -45,17 +45,52 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
   /// Search behaviour strategy applied in [reload].
   final ACSearchStrategy searchStrategy;
 
-  bool _isLoading = false;
+  bool _isReloading = false;
+  bool _isLoadingMore = false;
+  final ValueNotifier<bool> _loadingNotifier = ValueNotifier<bool>(false);
   bool _disposed = false;
   ACCancelStrategy? _activeCancel;
   T? _lastResult;
 
   /// Whether a load is currently in progress.
   ///
+  /// `true` while **any** load runs — either a [reload] or a [loadMore]; it is
+  /// the derived disjunction [isReloading] `||` [isLoadingMore]. The semantics
+  /// are unchanged from previous versions.
+  ///
   /// Read synchronously; [notifyListeners] is **not** invoked when this
-  /// flag changes. If a reactive spinner is needed, wrap the
-  /// `reload`/`loadMore` call in `setState` or its equivalent.
-  bool get isLoading => _isLoading;
+  /// flag changes. For a reactive spinner subscribe to [loadingListenable]
+  /// instead of wrapping the call in `setState`.
+  bool get isLoading => _isReloading || _isLoadingMore;
+
+  /// Whether a [reload] is currently in progress.
+  ///
+  /// Read synchronously. Mutually exclusive with [isLoadingMore]: during an
+  /// active load exactly one of the two is `true`; outside a load both are
+  /// `false`. Changing this flag does not invoke [notifyListeners].
+  bool get isReloading => _isReloading;
+
+  /// Whether a [loadMore] is currently in progress.
+  ///
+  /// Read synchronously. Mutually exclusive with [isReloading]: during an
+  /// active load exactly one of the two is `true`; outside a load both are
+  /// `false`. Changing this flag does not invoke [notifyListeners].
+  bool get isLoadingMore => _isLoadingMore;
+
+  /// Reactive channel mirroring [isLoading].
+  ///
+  /// Its `value` always equals [isLoading] and it notifies its listeners on
+  /// every actual `false`↔`true` transition, synchronously with the change
+  /// (including the synchronous start of [reload]). Repeated assignment of the
+  /// same value is de-duplicated by the underlying [ValueNotifier], so no-op
+  /// calls (e.g. [loadMore] while `!hasMore`) emit nothing.
+  ///
+  /// This channel is independent of the `notifyListeners` contract, which
+  /// fires only when the observed collection changes: subscribe here to drive
+  /// a spinner from the loading state without coupling to item updates.
+  ///
+  /// The resource is released by [dispose].
+  ValueListenable<bool> get loadingListenable => _loadingNotifier;
 
   /// The last result that was successfully returned by the loader.
   ///
@@ -74,6 +109,18 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
   ///
   /// Implemented by the subclass; read by the [loadMore] guard.
   bool get hasMore;
+
+  /// Sets the loading flags and syncs [loadingListenable] in one place.
+  ///
+  /// Assigns [isReloading] and [isLoadingMore] and pushes the derived
+  /// [isLoading] (`reloading || loadingMore`) into [loadingListenable]; the
+  /// [ValueNotifier] de-duplicates unchanged values. Must only be called on
+  /// non-disposed paths — after [dispose] the notifier is released.
+  void _setLoading({required bool reloading, required bool loadingMore}) {
+    _isReloading = reloading;
+    _isLoadingMore = loadingMore;
+    _loadingNotifier.value = reloading || loadingMore;
+  }
 
   /// Reloads from scratch.
   ///
@@ -110,7 +157,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     // Set the loading flag SYNCHRONOUSLY so that code that runs right
     // after `dispatcher.reload(...)` immediately sees `isLoading == true`
     // without waiting for the debounce or any internal awaits.
-    _isLoading = true;
+    _setLoading(reloading: true, loadingMore: false);
 
     final schedule = searchStrategy.schedule(params.query);
     if (schedule == null) {
@@ -122,7 +169,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
       }
       if (_disposed) return;
 
-      _isLoading = false;
+      _setLoading(reloading: false, loadingMore: false);
       onLoadRejected();
       return;
     }
@@ -162,7 +209,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     ACCancelStrategy? cancelStrategy,
   }) async {
     if (_disposed) return;
-    if (_isLoading) return;
+    if (isLoading) return;
     if (!hasMore) return;
 
     await runLoad(
@@ -190,7 +237,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     await previousCancel?.cancel();
     if (_disposed) return;
 
-    _isLoading = false;
+    _setLoading(reloading: false, loadingMore: false);
   }
 
   /// Releases resources.
@@ -217,6 +264,8 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
       // of cancel is no longer needed by anyone.
       previousCancel.cancel().ignore();
     }
+
+    _loadingNotifier.dispose();
 
     super.dispose();
   }
@@ -250,7 +299,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     final previousCancel = _activeCancel;
     final capturedCancel = cancelStrategy ?? ACOperationCancelStrategy();
     _activeCancel = capturedCancel;
-    _isLoading = true;
+    _setLoading(reloading: replace, loadingMore: !replace);
 
     if (previousCancel != null) {
       await previousCancel.cancel();
@@ -268,7 +317,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
       onLoadSuccess(result, params, replace: replace);
     } finally {
       if (!_disposed && identical(_activeCancel, capturedCancel)) {
-        _isLoading = false;
+        _setLoading(reloading: false, loadingMore: false);
       }
     }
   }
