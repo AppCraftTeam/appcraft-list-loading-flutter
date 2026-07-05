@@ -1,5 +1,7 @@
 library;
 
+export 'src/ac_anchored_dispatcher.dart';
+export 'src/ac_anchored_page.dart';
 export 'src/ac_cancel_strategy.dart';
 export 'src/ac_debouncer.dart';
 export 'src/ac_dispatcher_operation.dart';

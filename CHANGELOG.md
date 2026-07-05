@@ -15,6 +15,30 @@ Template for future CHANGELOG.md entries:
 
 ## draft
 
+- **Added:** new self-contained `ACAnchoredDispatcher<P extends ACParamsMixin, R extends ACPage<T>, T>`
+  — a bidirectional, anchor-centred dispatcher for chat/feed pagination, built
+  as a composition of **two** `ACPageDispatcher`s (one per side), so each side
+  reuses the full loading engine (cancellation, staleness guards, `isLoading`,
+  `lastResult`, error channels, `retry`, `mutate`). `loadAround` seeds the
+  window around an anchor (cancelling any previous around-load and both sides);
+  `loadOlder` / `loadNewer` grow each side independently via `loadMore`. Exposes
+  the separate `itemsOlder` / `itemsNewer` (for a `CustomScrollView(center:)`
+  without scroll jumps) and a merged read-only `items`
+  (`reverse(itemsOlder) ++ itemsNewer`), fully per-side state
+  (`isLoadingOlder` / `isLoadingNewer` / `isLoadingAround`,
+  `hasMoreOlder` / `hasMoreNewer`, `lastErrorOlder/Newer/Around` with matching
+  `error*Listenable` and `loading*Listenable`, `lastResultOlder/Newer`,
+  `lastAround`, `retryOlder` / `retryNewer`), realtime `mutateOlder` /
+  `mutateNewer`, plus `cancel` and an idempotent `dispose`. Cursors are managed
+  manually by the consumer (initial ones from `lastAround`, subsequent ones from
+  `lastResult*`).
+- **Added:** new around-page contract `ACAnchoredPage<T>` (mixin with `items`,
+  `hasMoreOlder`, `hasMoreNewer`) — returned by `ACAnchoredDispatcher.loadAround`,
+  it carries **both** directional flags at once (unlike the per-side `ACPage`,
+  whose `hasMore` means "more on this side"). The per-side `loadOlder` /
+  `loadNewer` keep using the existing `ACPage` model.
+- Additive only — a new composition on top of two existing `ACPageDispatcher`s;
+  no existing class is changed and no migration is required.
 - **Added:** new standalone `ACDebouncer` — an action-neutral debounce utility
   that collapses a burst of calls into a single trailing-edge invocation
   (`run(void Function())`, `isActive`, `cancel()`, `dispose()`), with a
