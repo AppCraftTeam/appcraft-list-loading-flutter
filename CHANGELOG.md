@@ -15,6 +15,18 @@ Template for future CHANGELOG.md entries:
 
 ## draft
 
+- **Added:** new public abstract `ACLoadingDispatcher<Params extends ACParamsMixin, T>`
+  — the shared loading engine that owns the whole lifecycle (search
+  scheduling, cancellation of a previous load, staleness guards, the
+  `isLoading` flag and the typed `lastResult`) behind
+  `reload` / `loadMore` / `cancel` / `dispose`. It is also a public
+  extension point: subclass it to implement non-standard pagination by
+  providing only the collection state and the `hasMore` / `onLoadSuccess` /
+  `onLoadRejected` hooks.
+- **Changed:** `ACListDispatcher` and `ACPageDispatcher` are now thin
+  subclasses of `ACLoadingDispatcher` — the duplicated loading state machine
+  lives in one place. Internal refactor only: their public API and behaviour
+  are unchanged, no breaking changes and no migration required.
 - **Added:** new self-contained `ACPageDispatcher<P extends ACParamsMixin, R extends ACPage<T>, T>`
   for DTO/cursor pagination where the loader returns a page model. It works
   directly with the model — `items` and `hasMore` are read from it — without

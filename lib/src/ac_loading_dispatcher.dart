@@ -1,0 +1,301 @@
+import 'package:flutter/foundation.dart';
+
+import 'ac_cancel_strategy.dart';
+import 'ac_params.dart';
+import 'ac_search_strategy.dart';
+
+/// Shared loading engine for paginated dispatchers.
+///
+/// Encapsulates the full loading lifecycle — search scheduling, cancellation
+/// of a previous load, staleness guards, the `try/finally` reset of
+/// [isLoading] and the commit of [lastResult] — in a single place. Concrete
+/// dispatchers (`ACListDispatcher`, `ACPageDispatcher`) extend this class and
+/// only provide the collection state and a handful of extension points
+/// ([hasMore], [onLoadSuccess], [onLoadRejected]).
+///
+/// The engine is deliberately agnostic about *items*: it works purely with
+/// the loader **result** type [T]. `ACListDispatcher` binds `T = List<Item>`,
+/// `ACPageDispatcher` binds `T = R extends ACPage<Item>`. Because
+/// [lastResult] is typed `T?`, each subclass inherits a precisely typed
+/// `lastResult` (`List<Item>?` / `R?`) without declaring its own getter.
+///
+/// The dispatcher extends [ChangeNotifier]. The engine itself never calls
+/// [notifyListeners]; notifications are emitted by the subclass hooks
+/// ([onLoadSuccess], [onLoadRejected]) only when the observed collection
+/// actually changes. Changes to [isLoading] or [hasMore] on their own do not
+/// notify subscribers.
+///
+/// Generic parameters:
+/// - [Params] — the loading parameters type mixing in [ACParamsMixin];
+/// - [T] — the loader result type (not the element type).
+///
+/// This class is a public extension point: third-party code may subclass it
+/// to implement non-standard pagination while reusing the loading engine.
+abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
+    extends ChangeNotifier {
+  /// Creates a dispatcher with an optional [searchStrategy].
+  ///
+  /// If [searchStrategy] is not provided, an [ACDebouncedSearchStrategy]
+  /// with defaults is used (debounce `300ms`, `minLength = 3`). The
+  /// strategy is set once and does not change afterwards.
+  ACLoadingDispatcher({
+    ACSearchStrategy? searchStrategy,
+  }) : searchStrategy = searchStrategy ?? ACDebouncedSearchStrategy();
+
+  /// Search behaviour strategy applied in [reload].
+  final ACSearchStrategy searchStrategy;
+
+  bool _isLoading = false;
+  bool _disposed = false;
+  ACCancelStrategy? _activeCancel;
+  T? _lastResult;
+
+  /// Whether a load is currently in progress.
+  ///
+  /// Read synchronously; [notifyListeners] is **not** invoked when this
+  /// flag changes. If a reactive spinner is needed, wrap the
+  /// `reload`/`loadMore` call in `setState` or its equivalent.
+  bool get isLoading => _isLoading;
+
+  /// The last result that was successfully returned by the loader.
+  ///
+  /// Updated after every successful [reload] or [loadMore] — stores the
+  /// same [T] reference returned by the loader (no defensive copy).
+  ///
+  /// `null` until the first successful load. Not reset by:
+  /// - rejection by `minLength` in [reload];
+  /// - exceptions thrown by the loader;
+  /// - [cancel] before the wait completes.
+  ///
+  /// Reset to `null` by [dispose].
+  T? get lastResult => _lastResult;
+
+  /// Whether there are more items to load via [loadMore].
+  ///
+  /// Implemented by the subclass; read by the [loadMore] guard.
+  bool get hasMore;
+
+  /// Reloads from scratch.
+  ///
+  /// Behaviour is determined by [searchStrategy]. The strategy receives
+  /// `params.query` and returns:
+  /// - `null` — rejection by `minLength`: [onLoadRejected] is invoked, the
+  ///   loader is **not** called;
+  /// - `Future<void>` — the load should be started when it resolves
+  ///   (immediately or after a debounce). On resolve the dispatcher runs
+  ///   the loader via [runLoad] with `replace: true`.
+  ///
+  /// Any active load is cancelled before a new one starts via the
+  /// previously stored [ACCancelStrategy].
+  ///
+  /// [load] is called with the provided [params]. Loader exceptions are
+  /// **propagated outside**; the [isLoading] flag is reset before the
+  /// exception leaves the method.
+  ///
+  /// A result that arrives after [dispose], or after a newer [reload] has
+  /// already started, is ignored (it is not applied to the state and does
+  /// not notify).
+  ///
+  /// [cancelStrategy] — an optional cancellation strategy specifically for
+  /// this load. Priority: argument -> a new [ACOperationCancelStrategy] for
+  /// each call. In the minLength rejection branch [cancelStrategy] is not
+  /// used: the load does not start.
+  Future<void> reload({
+    required Params params,
+    required Future<T> Function(Params params) load,
+    ACCancelStrategy? cancelStrategy,
+  }) async {
+    if (_disposed) return;
+
+    // Set the loading flag SYNCHRONOUSLY so that code that runs right
+    // after `dispatcher.reload(...)` immediately sees `isLoading == true`
+    // without waiting for the debounce or any internal awaits.
+    _isLoading = true;
+
+    final schedule = searchStrategy.schedule(params.query);
+    if (schedule == null) {
+      // Rejection by minLength — delegate collection reset to the subclass.
+      final previousCancel = _activeCancel;
+      _activeCancel = null;
+      if (previousCancel != null) {
+        await previousCancel.cancel();
+      }
+      if (_disposed) return;
+
+      _isLoading = false;
+      onLoadRejected();
+      return;
+    }
+
+    await schedule;
+    if (_disposed) return;
+
+    await runLoad(
+      params: params,
+      load: load,
+      replace: true,
+      cancelStrategy: cancelStrategy,
+    );
+  }
+
+  /// Loads the next page.
+  ///
+  /// Ignored (without an error and without changing state) if:
+  /// - another load is already in progress (`isLoading == true`);
+  /// - [hasMore] == `false`;
+  /// - the dispatcher has already been `dispose`-d.
+  ///
+  /// The search strategy is not applied in [loadMore]: [searchStrategy] is
+  /// not invoked, there is no debounce and the minLength check is skipped.
+  /// The query from [params] is passed to [load] as-is.
+  ///
+  /// The load runs via [runLoad] with `replace: false`. Loader exceptions
+  /// are **propagated outside**; the [isLoading] flag is reset before the
+  /// exception leaves the method.
+  ///
+  /// [cancelStrategy] — an optional cancellation strategy specifically for
+  /// this load. Priority: argument -> a new [ACOperationCancelStrategy] for
+  /// each call.
+  Future<void> loadMore({
+    required Params params,
+    required Future<T> Function(Params params) load,
+    ACCancelStrategy? cancelStrategy,
+  }) async {
+    if (_disposed) return;
+    if (_isLoading) return;
+    if (!hasMore) return;
+
+    await runLoad(
+      params: params,
+      load: load,
+      replace: false,
+      cancelStrategy: cancelStrategy,
+    );
+  }
+
+  /// Cancels the active load (including the pending timer in
+  /// [searchStrategy]).
+  ///
+  /// Does not reset the collection state or [lastResult]. If no load is in
+  /// progress, this is a safe no-op. After [dispose] it is also safe (does
+  /// nothing). [notifyListeners] is not invoked because the collection does
+  /// not change.
+  Future<void> cancel() async {
+    if (_disposed) return;
+
+    searchStrategy.cancel();
+
+    final previousCancel = _activeCancel;
+    _activeCancel = null;
+    await previousCancel?.cancel();
+    if (_disposed) return;
+
+    _isLoading = false;
+  }
+
+  /// Releases resources.
+  ///
+  /// Cancels the active load and the [searchStrategy] pending timer
+  /// (cancellation errors are ignored), releases the search strategy's
+  /// resources, resets [lastResult] and marks the dispatcher as disposed.
+  /// A repeated [dispose] is an idempotent no-op. Any public methods
+  /// called after [dispose] become no-ops and do not mutate state.
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+
+    searchStrategy.dispose();
+
+    // Cancel the active load fire-and-forget: errors are ignored,
+    // releasing resources takes priority.
+    final previousCancel = _activeCancel;
+    _activeCancel = null;
+    _lastResult = null;
+    if (previousCancel != null) {
+      // Don't await: ChangeNotifier.dispose is synchronous. The result
+      // of cancel is no longer needed by anyone.
+      previousCancel.cancel().ignore();
+    }
+
+    super.dispose();
+  }
+
+  /// Common loading routine for [reload] and [loadMore] — the single copy
+  /// of the loading state machine.
+  ///
+  /// When `replace == true` the loader result replaces the collection; when
+  /// `replace == false` it is appended (loadMore). The concrete write is
+  /// delegated to [onLoadSuccess].
+  ///
+  /// [cancelStrategy] is selected by priority: argument -> a new
+  /// [ACOperationCancelStrategy]. The selected instance is stored in
+  /// `_activeCancel` so that the next [reload] can cancel it and so that
+  /// stale results (from a superseded load) are ignored via an
+  /// `identical(_activeCancel, captured)` guard.
+  ///
+  /// On a successful, non-stale load [lastResult] is committed first, then
+  /// [onLoadSuccess] applies the result. Loader exceptions are not caught:
+  /// `try/finally` guarantees that [isLoading] is reset before the exception
+  /// is propagated.
+  @protected
+  Future<void> runLoad({
+    required Params params,
+    required Future<T> Function(Params params) load,
+    required bool replace,
+    ACCancelStrategy? cancelStrategy,
+  }) async {
+    if (_disposed) return;
+
+    final previousCancel = _activeCancel;
+    final capturedCancel = cancelStrategy ?? ACOperationCancelStrategy();
+    _activeCancel = capturedCancel;
+    _isLoading = true;
+
+    if (previousCancel != null) {
+      await previousCancel.cancel();
+    }
+    if (_disposed || !identical(_activeCancel, capturedCancel)) {
+      return;
+    }
+
+    try {
+      final result = await capturedCancel.run<T>(load(params));
+      if (_disposed || !identical(_activeCancel, capturedCancel)) return;
+      if (result == null) return; // cancelled
+
+      _lastResult = result;
+      onLoadSuccess(result, params, replace: replace);
+    } finally {
+      if (!_disposed && identical(_activeCancel, capturedCancel)) {
+        _isLoading = false;
+      }
+    }
+  }
+
+  /// Applies a successful loader [result] to the collection.
+  ///
+  /// Invoked by [runLoad] after [lastResult] has been committed. The
+  /// subclass replaces (`replace == true`) or appends (`replace == false`)
+  /// the collection, recomputes/sets [hasMore] and calls [notifyListeners].
+  /// [params] is provided for subclasses that derive `hasMore` from the
+  /// request (offset pagination); page-model subclasses ignore it.
+  @protected
+  void onLoadSuccess(T result, Params params, {required bool replace});
+
+  /// Handles a `minLength` rejection from [searchStrategy] in [reload].
+  ///
+  /// Invoked after [isLoading] has been reset to `false`. The subclass
+  /// clears the collection, sets `hasMore = false` and calls
+  /// [notifyListeners] only when the collection was non-empty (i.e. it
+  /// actually changed).
+  @protected
+  void onLoadRejected();
+
+  /// Whether the dispatcher has been disposed.
+  ///
+  /// Exposed for subclass mutators (e.g. `mutate`) that must become no-ops
+  /// after [dispose].
+  @protected
+  bool get isDisposed => _disposed;
+}
