@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'ac_cancel_strategy.dart';
+import 'ac_dispatcher_operation.dart';
 import 'ac_params.dart';
 import 'ac_search_strategy.dart';
 
@@ -51,6 +52,8 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
   bool _disposed = false;
   ACCancelStrategy? _activeCancel;
   T? _lastResult;
+  ACDispatcherOperation<Params, T>? _lastOperation;
+  final ValueNotifier<Object?> _errorNotifier = ValueNotifier<Object?>(null);
 
   /// Whether a load is currently in progress.
   ///
@@ -105,6 +108,36 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
   /// Reset to `null` by [dispose].
   T? get lastResult => _lastResult;
 
+  /// The last operation captured for [retry] and introspection.
+  ///
+  /// A [reload] is recorded at the very start of the call; a [loadMore] is
+  /// recorded only after passing every guard (a no-op `loadMore` does not
+  /// overwrite the previous operation). Pattern-match the sealed variants
+  /// ([ACReloadOperation] / [ACLoadMoreOperation]) to inspect it.
+  ///
+  /// `null` until the first operation. Reset to `null` by [dispose].
+  ACDispatcherOperation<Params, T>? get lastOperation => _lastOperation;
+
+  /// The error thrown by the last completed load, or `null` if it succeeded.
+  ///
+  /// Set when an **active** (non-stale) load throws — the exception is still
+  /// propagated by [reload]/[loadMore]. Cleared to `null` by a successful
+  /// load. Not touched by [cancel] or a `minLength` rejection.
+  ///
+  /// Always equals [errorListenable]`.value`. Reset to `null` by [dispose].
+  Object? get lastError => _errorNotifier.value;
+
+  /// Reactive channel mirroring [lastError].
+  ///
+  /// Its `value` always equals [lastError] and it notifies its listeners only
+  /// on an actual value change (the underlying [ValueNotifier] de-duplicates
+  /// repeated assignments of the same error). This channel is independent of
+  /// the `notifyListeners` contract: changing [lastError] does not invoke
+  /// [notifyListeners].
+  ///
+  /// The resource is released by [dispose].
+  ValueListenable<Object?> get errorListenable => _errorNotifier;
+
   /// Whether there are more items to load via [loadMore].
   ///
   /// Implemented by the subclass; read by the [loadMore] guard.
@@ -153,6 +186,8 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     ACCancelStrategy? cancelStrategy,
   }) async {
     if (_disposed) return;
+
+    _lastOperation = ACReloadOperation(params: params, load: load);
 
     // Set the loading flag SYNCHRONOUSLY so that code that runs right
     // after `dispatcher.reload(...)` immediately sees `isLoading == true`
@@ -220,12 +255,39 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     if (isLoading) return;
     if (!force && !hasMore) return;
 
+    _lastOperation = ACLoadMoreOperation(
+      params: params,
+      load: load,
+      force: force,
+    );
+
     await runLoad(
       params: params,
       load: load,
       replace: false,
       cancelStrategy: cancelStrategy,
     );
+  }
+
+  /// Repeats the last captured [lastOperation].
+  ///
+  /// Re-dispatches through the public [reload]/[loadMore] entry points, so the
+  /// [searchStrategy] and every guard apply exactly as on the original call; a
+  /// forced [loadMore] is retried with the same `force`. Each retry uses a
+  /// fresh default `cancelStrategy`.
+  ///
+  /// A no-op (returns a completed future) when no operation was captured yet
+  /// or after [dispose]. Loader exceptions are propagated as by the underlying
+  /// [reload]/[loadMore].
+  Future<void> retry() {
+    if (_disposed) return Future<void>.value();
+    return switch (_lastOperation) {
+      null => Future<void>.value(),
+      ACReloadOperation(:final params, :final load) =>
+        reload(params: params, load: load),
+      ACLoadMoreOperation(:final params, :final load, :final force) =>
+        loadMore(params: params, load: load, force: force),
+    };
   }
 
   /// Cancels the active load (including the pending timer in
@@ -267,6 +329,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     final previousCancel = _activeCancel;
     _activeCancel = null;
     _lastResult = null;
+    _lastOperation = null;
     if (previousCancel != null) {
       // Don't await: ChangeNotifier.dispose is synchronous. The result
       // of cancel is no longer needed by anyone.
@@ -274,6 +337,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     }
 
     _loadingNotifier.dispose();
+    _errorNotifier.dispose();
 
     super.dispose();
   }
@@ -321,8 +385,14 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
       if (_disposed || !identical(_activeCancel, capturedCancel)) return;
       if (result == null) return; // cancelled
 
+      _errorNotifier.value = null;
       _lastResult = result;
       onLoadSuccess(result, params, replace: replace);
+    } catch (e) {
+      if (!_disposed && identical(_activeCancel, capturedCancel)) {
+        _errorNotifier.value = e;
+      }
+      rethrow;
     } finally {
       if (!_disposed && identical(_activeCancel, capturedCancel)) {
         _setLoading(reloading: false, loadingMore: false);

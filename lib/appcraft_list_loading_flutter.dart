@@ -1,6 +1,7 @@
 library;
 
 export 'src/ac_cancel_strategy.dart';
+export 'src/ac_dispatcher_operation.dart';
 export 'src/ac_list_dispatcher.dart';
 export 'src/ac_loading_dispatcher.dart';
 export 'src/ac_page.dart';
