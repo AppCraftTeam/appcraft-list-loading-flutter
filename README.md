@@ -42,6 +42,7 @@ without imposing any specific state-management library (both dispatchers extend
 > `ACResultParser` and the `ACResult` model are deprecated and will be removed
 > in `1.0.0`. Use the self-contained `ACListDispatcher` / `ACPageDispatcher`
 > and the `ACPage` mixin instead. See the [API Reference](#api-reference).
+> Upgrading from 0.2.0? Follow the step-by-step [migration guide](MIGRATION.md).
 
 ## Installation
 

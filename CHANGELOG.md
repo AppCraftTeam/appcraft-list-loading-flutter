@@ -13,7 +13,9 @@ Template for future CHANGELOG.md entries:
 - Each change is a separate bullet, without unnecessary implementation details.
 -->
 
-## draft
+## 0.3.0 - 2026-07-06
+
+> Migration from 0.2.0 → 0.3.0: see [MIGRATION.md](MIGRATION.md).
 
 - **Added:** new self-contained `ACAnchoredDispatcher<P extends ACParamsMixin, R extends ACPage<T>, T>`
   — a bidirectional, anchor-centred dispatcher for chat/feed pagination, built
