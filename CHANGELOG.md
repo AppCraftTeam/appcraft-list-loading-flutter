@@ -13,7 +13,7 @@ Template for future CHANGELOG.md entries:
 - Each change is a separate bullet, without unnecessary implementation details.
 -->
 
-## 0.3.0 - 2026-07-06
+## 0.3.0
 
 > Migration from 0.2.0 → 0.3.0: see [MIGRATION.md](MIGRATION.md).
 
