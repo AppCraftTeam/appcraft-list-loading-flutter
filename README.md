@@ -32,6 +32,11 @@ without imposing any specific state-management library (both dispatchers extend
   `AnimatedBuilder` or `addListener`.
 - External list control via `mutate` (realtime/optimistic/seed) with a
   manual `hasMore` setter, on both dispatchers.
+- Bidirectional, anchor-based pagination for chat/feed via
+  `ACAnchoredDispatcher` (a composition of two `ACPageDispatcher`s):
+  `loadAround` / `loadOlder` / `loadNewer`, separate `itemsOlder` / `itemsNewer`
+  for a jump-free `CustomScrollView(center:)` plus a merged `items`, fully
+  per-side state and realtime `mutateOlder` / `mutateNewer`.
 
 > **Deprecated:** `ACDispatcher`, `ACCustomDispatcher`, `ACParser`,
 > `ACResultParser` and the `ACResult` model are deprecated and will be removed
@@ -231,7 +236,167 @@ realtime / optimistic / seed writes (a single batched notification) and a
 manual `hasMore` setter — with the same rules as `ACListDispatcher`. See
 [Manual list control](#manual-list-control--mutate--hasmore).
 
-### 3. Debounced search — `ACSearchDebouncer`
+### 3. Bidirectional chat/feed pagination — `ACAnchoredDispatcher`
+
+For a chat or a feed that opens **around** an anchor (first unread message, a
+deep-linked item) and then grows in **both** directions — back in time (older)
+and forward in time (newer) — use `ACAnchoredDispatcher`. It is built as a
+composition of two `ACPageDispatcher`s (one per side), so each side reuses the
+full loading engine (cancellation, staleness guards, `isLoading`, `lastResult`,
+error channels, `retry`, `mutate`); this class only orchestrates the anchor
+load and exposes a merged list view. It extends `ChangeNotifier`.
+
+The around-load returns an `ACAnchoredPage<T>` — an around-page model that
+carries **both** directional flags at once (`hasMoreOlder` / `hasMoreNewer`),
+unlike the per-side `ACPage` whose `hasMore` means "is there more on **this**
+side". `loadOlder` / `loadNewer` keep using a plain `ACPage` DTO.
+
+```dart
+import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
+
+// around-page (for loadAround) — carries both flags
+final class ChatAround with ACAnchoredPage<Msg> {
+  const ChatAround({
+    required this.items,
+    required this.hasMoreOlder,
+    required this.hasMoreNewer,
+    this.olderCursor,
+    this.newerCursor,
+  });
+
+  @override
+  final List<Msg> items;
+  @override
+  final bool hasMoreOlder;
+  @override
+  final bool hasMoreNewer;
+  final String? olderCursor; // initial cursors — read back via lastAround
+  final String? newerCursor;
+}
+
+// side-page (for loadOlder/loadNewer) — hasMore = "more on THIS side"
+final class ChatPage with ACPage<Msg> {
+  const ChatPage({required this.items, required this.hasMore, this.cursor});
+
+  @override
+  final List<Msg> items;
+  @override
+  final bool hasMore;
+  final String? cursor;
+}
+```
+
+#### Start around the anchor — `loadAround`
+
+`loadAround` runs its own orchestration: it cancels any previous around-load
+and **both** sides, seeds the central page into the newer side, clears the
+older side and applies both `hasMore` flags. The central page is stored in
+`lastAround`. A failing loader still **throws** (kept in `lastErrorAround`).
+
+```dart
+final d = ACAnchoredDispatcher<ChatParams, ChatPage, Msg>();
+
+await d.loadAround(
+  params: ChatParams(anchorId: firstUnreadId),
+  load: (p) => api.fetchAround(p.anchorId), // -> ChatAround
+);
+// d.itemsNewer == the centred window; d.itemsOlder == [];
+// d.hasMoreOlder / d.hasMoreNewer come from the response.
+```
+
+#### Grow up/down — `loadOlder` / `loadNewer`
+
+Each side delegates to its dispatcher's `loadMore` (the `!hasMore` / `isLoading`
+guards and one-shot `force` apply). Cursors are managed manually: the initial
+ones come from `lastAround`, subsequent ones from `lastResultOlder` /
+`lastResultNewer`.
+
+```dart
+if (d.hasMoreOlder) {
+  await d.loadOlder(
+    params: ChatParams(
+      cursor: d.lastResultOlder?.cursor ??
+          (d.lastAround as ChatAround?)?.olderCursor,
+    ),
+    load: (p) => api.fetchOlder(p.cursor), // hasMore = "more older"
+  );
+}
+if (d.hasMoreNewer) {
+  await d.loadNewer(
+    params: ChatParams(
+      cursor: d.lastResultNewer?.cursor ??
+          (d.lastAround as ChatAround?)?.newerCursor,
+    ),
+    load: (p) => api.fetchNewer(p.cursor), // hasMore = "more newer"
+  );
+}
+```
+
+#### Two lists for `CustomScrollView(center:)` — no scroll jumps
+
+`itemsOlder` (closest-older → oldest) and `itemsNewer` (anchor → newest) are
+exposed **separately** so they feed two slivers around a `center` key — growing
+the older side does not shift the visible position. A merged, read-only
+`items == reverse(itemsOlder) ++ itemsNewer` is also available for consumers
+that prefer a single list.
+
+```dart
+CustomScrollView(
+  center: centerKey,
+  anchor: 0.5,
+  slivers: [
+    if (d.isLoadingOlder) const SliverToBoxAdapter(child: TopSpinner()),
+    SliverList.builder(                          // TOP: older, grows up, no jumps
+      itemCount: d.itemsOlder.length,
+      itemBuilder: (_, i) => MsgTile(d.itemsOlder[i]),
+    ),
+    SliverList.builder(                          // BOTTOM: anchor + newer
+      key: centerKey,
+      itemCount: d.itemsNewer.length,
+      itemBuilder: (_, i) => MsgTile(d.itemsNewer[i]),
+    ),
+    if (d.isLoadingNewer) const SliverToBoxAdapter(child: BottomSpinner()),
+  ],
+);
+```
+
+#### Realtime — `mutateNewer` / `mutateOlder`
+
+`mutateOlder` / `mutateNewer` delegate to the respective side's `mutate` — the
+only sanctioned write path (the list getters stay unmodifiable). A single
+batched `notifyListeners()` fires per call; a no-op after `dispose`.
+
+```dart
+socket.onMessage((m) => d.mutateNewer((items) => items.add(m))); // incoming — down
+d.mutateNewer((items) => items                                   // optimistic — one notify
+  ..removeWhere((x) => x.localId == pending.localId)
+  ..add(sent));
+```
+
+#### Per-side indicators / errors / retry
+
+Loading, error and retry state is fully **per side** and independent — a load
+or a failure on one side never touches the other:
+`isLoadingOlder` / `isLoadingNewer` / `isLoadingAround`,
+`loadingOlderListenable` / `loadingNewerListenable` / `loadingAroundListenable`,
+`lastErrorOlder` / `lastErrorNewer` / `lastErrorAround` (with matching
+`errorOlderListenable` / `errorNewerListenable` / `errorAroundListenable`),
+`retryOlder()` / `retryNewer()`, and `lastResultOlder` / `lastResultNewer` /
+`lastAround`.
+
+```dart
+ValueListenableBuilder<bool>(
+  valueListenable: d.loadingOlderListenable,      // spinner on top
+  builder: (_, loading, __) => loading ? const TopSpinner() : const SizedBox(),
+);
+if (d.lastErrorNewer != null) RetryButton(onTap: d.retryNewer); // error at the bottom
+```
+
+`cancel()` cancels the around-load and both sides; `dispose()` releases both
+sides and is idempotent (any method after `dispose` is a no-op). The per-side
+`searchStrategy` is not applied — the dispatcher only uses `loadMore`.
+
+### 4. Debounced search — `ACSearchDebouncer`
 
 `ACSearchDebouncer` is the **default** search strategy on both dispatchers
 (a fresh dispatcher already debounces search with `debounce: 300ms`,
@@ -286,7 +451,7 @@ final dispatcher =
     ACListDispatcher<UserListParams, User>(searchStrategy: InstantSearch());
 ```
 
-### 4. Debouncing any action — `ACDebouncer`
+### 5. Debouncing any action — `ACDebouncer`
 
 `ACSearchDebouncer` handles search timing, but the underlying `ACDebouncer` is
 exposed as a standalone, action-neutral utility for debouncing **any**
@@ -319,7 +484,7 @@ void dispose() {
 - `dispose()` is **mandatory** — it cancels the pending timer so a deferred
   action never fires after teardown. It is equivalent to `cancel()`.
 
-### 5. Custom cancel strategy — `ACCancelStrategy`
+### 6. Custom cancel strategy — `ACCancelStrategy`
 
 If you need to integrate with your own cancellation system (for example a
 `Dio` `CancelToken`), implement `ACCancelStrategy` and pass an instance to
@@ -365,7 +530,7 @@ await dispatcher.reload(
 );
 ```
 
-### 6. Reactive loading indicator — `loadingListenable`
+### 7. Reactive loading indicator — `loadingListenable`
 
 Both dispatchers extend `ChangeNotifier`, but `notifyListeners()` fires only
 when `items` change — a change of `isLoading` alone does not wake listeners.
@@ -421,7 +586,7 @@ flags are read synchronously; there is no separate `ValueListenable` for them
 the base `ACLoadingDispatcher`, so `ACListDispatcher`, `ACPageDispatcher` and
 third-party subclasses get it for free.
 
-### 7. Built-in error state — `lastError` / `errorListenable` / `retry()`
+### 8. Built-in error state — `lastError` / `errorListenable` / `retry()`
 
 A failing `load` still **throws** — your `try/catch` around `reload` / `loadMore`
 keeps working exactly as before. On top of that the engine now records the
@@ -623,6 +788,18 @@ it from the hooks only when the collection actually changes.
   directly from the returned page model. `lastResult` exposes the raw `R`
   from the most recent successful load (useful for cursor pagination or DTO
   metadata).
+- `ACAnchoredDispatcher<P, R, T>` — bidirectional, anchor-centred dispatcher
+  for chat/feed pagination, built as a composition of two `ACPageDispatcher`s.
+  `loadAround` seeds the window around an anchor; `loadOlder` / `loadNewer`
+  grow each side independently. Exposes the separate `itemsOlder` / `itemsNewer`
+  (for a `CustomScrollView(center:)` without scroll jumps) and a merged read-only
+  `items`, fully per-side state (`isLoadingOlder/Newer/Around`, `hasMoreOlder/Newer`,
+  `lastError*` / `error*Listenable`, `loading*Listenable`, `lastResultOlder/Newer`,
+  `lastAround`, `retryOlder/Newer`), realtime `mutateOlder` / `mutateNewer`, plus
+  `cancel` and an idempotent `dispose`.
+- `ACAnchoredPage<T>` — around-page contract mixin (`items`, `hasMoreOlder`,
+  `hasMoreNewer`) returned by `ACAnchoredDispatcher.loadAround`; carries both
+  directional flags at once.
 - `ACLoadingDispatcher<Params, T>` — the abstract loading engine shared by
   both dispatchers. Owns the loading lifecycle (`reload`, `loadMore`,
   `cancel`, `dispose`, `isLoading`, `lastResult`); subclasses provide the
