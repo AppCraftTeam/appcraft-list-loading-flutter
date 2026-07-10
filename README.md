@@ -38,11 +38,11 @@ without imposing any specific state-management library (both dispatchers extend
   for a jump-free `CustomScrollView(center:)` plus a merged `items`, fully
   per-side state and realtime `mutateOlder` / `mutateNewer`.
 
-> **Deprecated:** `ACDispatcher`, `ACCustomDispatcher`, `ACParser`,
-> `ACResultParser` and the `ACResult` model are deprecated and will be removed
-> in `1.0.0`. Use the self-contained `ACListDispatcher` / `ACPageDispatcher`
-> and the `ACPage` mixin instead. See the [API Reference](#api-reference).
-> Upgrading from 0.2.0? Follow the step-by-step [migration guide](MIGRATION.md).
+> **Removed in `1.0.0`:** the parser-based `ACDispatcher`, `ACCustomDispatcher`,
+> `ACParser`, `ACResultParser` and the `ACResult` model have been removed. Use
+> the self-contained `ACListDispatcher` / `ACPageDispatcher` and the `ACPage`
+> mixin instead. See the [API Reference](#api-reference). Upgrading from 0.2.0
+> or 0.3.0? Follow the step-by-step [migration guide](MIGRATION.md).
 
 ## Installation
 
@@ -55,14 +55,14 @@ flutter pub add appcraft_list_loading_flutter
 ### 1. Basic — `ACListDispatcher`
 
 The simplest scenario: the loader returns a plain `List<T>`, offset-based
-pagination, no search. `hasMore` is computed by the parser as
+pagination, no search. `hasMore` is computed as
 `result.length >= params.limit`. `ACListDispatcher` is the recommended
 dispatcher for this case.
 
 > **Migration note:** the older `ACDefaultDispatcher` / `ACDefaultParser`
-> classes are deprecated and will be removed in `1.0.0`. Their public
-> contract is identical to `ACListDispatcher` — migration is just renaming
-> the class. See the [API Reference](#api-reference).
+> classes were removed in `1.0.0`. Their public contract was identical to
+> `ACListDispatcher` — migration is just renaming the class. See the
+> [migration guide](MIGRATION.md).
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
@@ -180,12 +180,12 @@ and `hasMore` from it automatically — no separate parser is needed. Any extra
 fields (cursor, metadata) are read back through `dispatcher.lastResult`.
 
 > **Migration note:** the older `ACCustomDispatcher` / `ACResultParser` /
-> `ACParser` / `ACDispatcher` classes and the `ACResult` model are deprecated
-> and will be removed in `1.0.0`. Migration is mechanical: change the DTO
-> mixin `ACResult<T>` → `ACPage<T>` (the members are identical) and the
-> dispatcher class `ACCustomDispatcher` → `ACPageDispatcher`. Method
-> signatures, getters and behaviour are unchanged; `mutate` and the `hasMore`
-> setter are added on top. See the [API Reference](#api-reference).
+> `ACParser` / `ACDispatcher` classes and the `ACResult` model were removed in
+> `1.0.0`. Migration is mechanical: change the DTO mixin `ACResult<T>` →
+> `ACPage<T>` (the members are identical) and the dispatcher class
+> `ACCustomDispatcher` → `ACPageDispatcher`. Method signatures, getters and
+> behaviour are unchanged; `mutate` and the `hasMore` setter are added on top.
+> See the [migration guide](MIGRATION.md).
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
@@ -429,11 +429,11 @@ void onQueryChanged(String query) {
 }
 ```
 
-> **Migration note:** `ACDebouncedSearchStrategy` is deprecated and will be
-> removed in `1.0.0`. Replace it with `ACSearchDebouncer` — same `debounce` /
-> `minLength` parameters and identical behaviour, it is a straight rename. The
+> **Migration note:** `ACDebouncedSearchStrategy` was removed in `1.0.0`.
+> Replace it with `ACSearchDebouncer` — same `debounce` / `minLength`
+> parameters and identical behaviour, it is a straight rename. The
 > `ACSearchStrategy` contract stays for custom strategies. See the
-> [API Reference](#api-reference).
+> [migration guide](MIGRATION.md).
 
 For a fully custom search behaviour, implement `ACSearchStrategy` yourself and
 pass it as `searchStrategy` — for example an instant, no-debounce strategy:
@@ -686,10 +686,10 @@ Open classes:
 - `ACOperationCancelStrategy`
 
 The former parser-based extension points — the abstract `ACDispatcher` /
-`ACParser` base classes and the `ACResultParser` implementation — are
-**deprecated** (removed in `1.0.0`); custom parsing logic now lives inside a
-subclass of the relevant dispatcher instead. The `ACSearchStrategy`,
-`ACCancelStrategy` contracts and the mixins remain open.
+`ACParser` base classes and the `ACResultParser` implementation — were
+**removed in `1.0.0`**; custom parsing logic now lives inside a subclass of the
+relevant dispatcher instead. The `ACSearchStrategy`, `ACCancelStrategy`
+contracts and the mixins remain open.
 
 ### Example: extending the list dispatcher
 
@@ -830,7 +830,11 @@ it from the hooks only when the collection actually changes.
 - `ACOperationCancelStrategy` — cancellation implementation on top of
   `CancelableOperation` from `package:async`.
 
-### Deprecated (removed in `1.0.0`)
+### Removed in `1.0.0`
+
+The parser-based API deprecated in `0.3.0` was removed in `1.0.0`. The list
+below is kept for historical reference and points to the replacement of each
+class — see the [migration guide](MIGRATION.md) for details.
 
 - `ACDispatcher<P, R, T>` — parser-composing core dispatcher. Replaced by the
   self-contained `ACListDispatcher` / `ACPageDispatcher`.
@@ -845,8 +849,7 @@ it from the hooks only when the collection actually changes.
 - `ACDefaultDispatcher<P, T>` / `ACDefaultParser<P, T>` — replaced by
   `ACListDispatcher` (identical public contract).
 - `ACDebouncedSearchStrategy` — replaced by `ACSearchDebouncer` (same
-  `debounce` / `minLength` parameters and behaviour); moved to
-  `lib/src/deprecated/`.
+  `debounce` / `minLength` parameters and behaviour).
 
 Detailed documentation is available in the dartdoc on pub.dev.
 

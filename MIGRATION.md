@@ -1,20 +1,21 @@
-# Migration guide: 0.2.0 → 0.3.0
+# Migration guide: 0.2.0 → 1.0.0
 
-Version `0.3.0` is **purely additive** and does **not** break existing code.
-Every 0.2.0 public name still compiles and behaves as before — the release only
-adds the new self-contained dispatchers alongside the old ones.
+Version `1.0.0` **removes** the parser-based API entirely. Migration is now
+**mandatory**: the deprecated classes are gone, so any code that still uses them
+**no longer compiles**. In `0.3.0` these classes were merely `@Deprecated`
+(they compiled with a warning) — from `1.0.0` they are deleted.
 
-The parser-based classes (`ACDispatcher`, `ACCustomDispatcher`,
-`ACDefaultDispatcher`, the `ACParser` family, the `ACResult` model and
-`ACDebouncedSearchStrategy`) are now **deprecated**. They keep working and stay
-exported until `1.0.0`, so migration is **optional** — but it is **recommended**:
-the whole parser architecture is going away, and the new dispatchers are simpler
-(no parser to wire up) and richer (reactive loading, built-in error state,
-`retry`, `mutate`, forced load-more, bidirectional pagination).
+The removed classes are `ACDispatcher`, `ACCustomDispatcher`,
+`ACDefaultDispatcher`, the `ACParser` family (`ACParser`, `ACDefaultParser`,
+`ACResultParser`), the `ACResult` model and `ACDebouncedSearchStrategy`. Replace
+each of them with the self-contained dispatchers using the mapping table below.
+Besides being simpler (no parser to wire up), the new dispatchers are richer:
+reactive loading, built-in error state, `retry`, `mutate`, forced load-more and
+bidirectional pagination.
 
 ## Mapping table
 
-| 0.2.0 (deprecated) | 0.3.0 |
+| 0.2.0 (removed in 1.0.0) | 1.0.0 |
 |---|---|
 | `ACDefaultDispatcher<P, T>` | `ACListDispatcher<P, T>` |
 | `ACCustomDispatcher<P, R, T>` | `ACPageDispatcher<P, R, T>` |
@@ -39,7 +40,7 @@ await dispatcher.reload(
   load: (p) => api.fetchItems(offset: p.offset, limit: p.limit), // Future<List<Item>>
 );
 
-// After (0.3.0)
+// After (1.0.0)
 final dispatcher = ACListDispatcher<MyParams, Item>(); // no parser
 
 await dispatcher.reload(
@@ -72,7 +73,7 @@ await dispatcher.reload(
   load: (p) => api.fetchUserPage(limit: p.limit), // Future<UserPage>
 );
 
-// After (0.3.0)
+// After (1.0.0)
 final class UserPage with ACPage<User> {
   const UserPage({required this.items, required this.hasMore});
 
@@ -109,10 +110,10 @@ final dispatcher = ACDispatcher<MyParams, UserPage, User>(
   parser: const ACResultParser<MyParams, UserPage, User>(),
 );
 
-// After (0.3.0) — standard: no parser needed
+// After (1.0.0) — standard: no parser needed
 final dispatcher = ACPageDispatcher<MyParams, UserPage, User>();
 
-// After (0.3.0) — non-standard pagination: subclass the engine
+// After (1.0.0) — non-standard pagination: subclass the engine
 final class MyDispatcher<P extends ACParamsMixin, T>
     extends ACLoadingDispatcher<P, List<T>> {
   MyDispatcher({super.searchStrategy});
@@ -157,7 +158,7 @@ final dispatcher = ACDefaultDispatcher<MyParams, Item>(
   ),
 );
 
-// After (0.3.0)
+// After (1.0.0)
 final dispatcher = ACListDispatcher<MyParams, Item>(
   searchStrategy: ACSearchDebouncer(
     debounce: const Duration(milliseconds: 400),
@@ -175,12 +176,20 @@ mechanical:
 2. swap the DTO mixin `ACResult` → `ACPage`;
 3. remove the parser (`ACParser` / `ACDefaultParser` / `ACResultParser`).
 
-**The one behavioural difference:** a fresh 0.3.0 dispatcher reports
+**The one behavioural difference:** a fresh 1.0.0 dispatcher reports
 `hasMore == false` **before** the first load (the deprecated dispatchers
 reported `true`). So `hasMore` alone already gates a bottom loader, and
 `loadMore()` before the first `reload` is a no-op. If your code relied on a
 fresh dispatcher reporting `hasMore == true` (e.g. calling `loadMore` first),
 call `reload` first, or use `loadMore(force: true)` to bypass the guard.
+
+## Already on 0.3.0 (via the deprecated classes)?
+
+If you upgraded to `0.3.0` but kept using the deprecated parser-based classes
+(they still compiled there, with a warning), moving to `1.0.0` is the same
+mechanical swap: the deprecated classes are now **removed**, so replace every
+remaining use with its new counterpart from the mapping table above. There are
+no new steps — once no code references the removed classes, you are on `1.0.0`.
 
 ## What you get after migrating
 

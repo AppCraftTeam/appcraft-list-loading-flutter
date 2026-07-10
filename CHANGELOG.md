@@ -13,6 +13,17 @@ Template for future CHANGELOG.md entries:
 - Each change is a separate bullet, without unnecessary implementation details.
 -->
 
+## 1.0.0
+
+> Migration from 0.2.0 → 1.0.0: see [MIGRATION.md](MIGRATION.md).
+
+### BREAKING CHANGE
+
+- Removed deprecated parser-based API: `ACDispatcher`, `ACDefaultDispatcher`,
+  `ACCustomDispatcher`, `ACParser`, `ACDefaultParser`, `ACResultParser`,
+  `ACResult`, `ACDebouncedSearchStrategy`. Migrate to the self-contained
+  dispatchers — see MIGRATION.md.
+
 ## 0.3.0
 
 > Migration from 0.2.0 → 0.3.0: see [MIGRATION.md](MIGRATION.md).
