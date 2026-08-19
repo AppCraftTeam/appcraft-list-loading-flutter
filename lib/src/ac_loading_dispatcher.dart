@@ -50,6 +50,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
   bool _isReloading = false;
   bool _isLoadingMore = false;
   final ValueNotifier<bool> _loadingNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _reloadingNotifier = ValueNotifier<bool>(false);
   bool _disposed = false;
   ACCancelStrategy? _activeCancel;
   T? _lastResult;
@@ -95,6 +96,25 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
   ///
   /// The resource is released by [dispose].
   ValueListenable<bool> get loadingListenable => _loadingNotifier;
+
+  /// Reactive channel mirroring [isReloading].
+  ///
+  /// Its `value` always equals [isReloading] and it notifies on every actual
+  /// `false`↔`true` transition, synchronously with the change (including the
+  /// synchronous start of [reload]). Repeated assignment of the same value is
+  /// de-duplicated by the underlying [ValueNotifier].
+  ///
+  /// Unlike [loadingListenable], which carries the **derived** disjunction
+  /// [isReloading] `||` [isLoadingMore], this channel tracks the reload flag
+  /// alone. The difference is observable: when a [reload] starts while a
+  /// [loadMore] is still in flight, `loadingListenable` stays `true` and emits
+  /// nothing, while [isReloading] flips `false` → `true`. Subscribe here to
+  /// drive an initial-load spinner that must ignore incremental loading.
+  ///
+  /// This channel is independent of the `notifyListeners` contract.
+  ///
+  /// The resource is released by [dispose].
+  ValueListenable<bool> get reloadingListenable => _reloadingNotifier;
 
   /// The last result that was successfully returned by the loader.
   ///
@@ -146,14 +166,18 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
 
   /// Sets the loading flags and syncs [loadingListenable] in one place.
   ///
-  /// Assigns [isReloading] and [isLoadingMore] and pushes the derived
-  /// [isLoading] (`reloading || loadingMore`) into [loadingListenable]; the
-  /// [ValueNotifier] de-duplicates unchanged values. Must only be called on
-  /// non-disposed paths — after [dispose] the notifier is released.
+  /// Assigns [isReloading] and [isLoadingMore], pushes the derived
+  /// [isLoading] (`reloading || loadingMore`) into [loadingListenable] and the
+  /// reload flag alone into [reloadingListenable]; both [ValueNotifier]s
+  /// de-duplicate unchanged values. Keeping both channels in this single
+  /// write point is what guarantees they never drift from the getters. Must
+  /// only be called on non-disposed paths — after [dispose] the notifiers are
+  /// released.
   void _setLoading({required bool reloading, required bool loadingMore}) {
     _isReloading = reloading;
     _isLoadingMore = loadingMore;
     _loadingNotifier.value = reloading || loadingMore;
+    _reloadingNotifier.value = reloading;
   }
 
   /// Reloads from scratch.
@@ -338,6 +362,7 @@ abstract class ACLoadingDispatcher<Params extends ACParamsMixin, T>
     }
 
     _loadingNotifier.dispose();
+    _reloadingNotifier.dispose();
     _errorNotifier.dispose();
 
     super.dispose();

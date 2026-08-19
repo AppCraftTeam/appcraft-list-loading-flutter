@@ -7,6 +7,7 @@ import 'package:appcraft_list_loading_flutter/src/ac_page_dispatcher.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_params.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_search_debouncer.dart';
 import 'package:appcraft_list_loading_flutter/src/ac_search_strategy.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';
@@ -89,6 +90,16 @@ List<bool> _recordLoading(ACLoadingDispatcher<dynamic, dynamic> dispatcher) {
   final recorded = <bool>[];
   dispatcher.loadingListenable.addListener(() {
     recorded.add(dispatcher.loadingListenable.value);
+  });
+  return recorded;
+}
+
+/// Records the sequence of [ACLoadingDispatcher.reloadingListenable] values,
+/// captured at each notification.
+List<bool> _recordReloading(ACLoadingDispatcher<dynamic, dynamic> dispatcher) {
+  final recorded = <bool>[];
+  dispatcher.reloadingListenable.addListener(() {
+    recorded.add(dispatcher.reloadingListenable.value);
   });
   return recorded;
 }
@@ -416,6 +427,157 @@ void main() {
       expect(dispatcher.items, equals(<int>[1, 2]));
 
       dispatcher.dispose();
+    });
+  });
+
+  group('ACLoadingDispatcher — reloadingListenable (016)', () {
+    // ---- Scenario 1 -------------------------------------------------------
+    test('freshDispatcher_reloadingListenableFalse', () {
+      // Arrange
+      final dispatcher = _buildDispatcher();
+
+      // Act & Assert
+      expect(dispatcher.reloadingListenable.value, isFalse);
+      expect(dispatcher.reloadingListenable.value, dispatcher.isReloading);
+
+      dispatcher.dispose();
+    });
+
+    // ---- Scenario 2 -------------------------------------------------------
+    test('reload_togglesReloadingListenableTrueSyncThenFalse', () async {
+      // Arrange
+      final dispatcher = _buildDispatcher();
+      final recorded = _recordReloading(dispatcher);
+      final gate = Completer<List<int>>();
+      Future<List<int>> slowLoad(_TestParams _) => gate.future;
+
+      // Act — the flag flips synchronously on the call itself.
+      final future = dispatcher.reload(
+        params: const _TestParams(),
+        load: slowLoad,
+      );
+
+      // Assert — in flight.
+      expect(recorded, equals(<bool>[true]));
+      expect(dispatcher.reloadingListenable.value, isTrue);
+      expect(dispatcher.reloadingListenable.value, dispatcher.isReloading);
+
+      // Act — complete.
+      gate.complete(<int>[1, 2]);
+      await future;
+
+      // Assert — reset.
+      expect(recorded, equals(<bool>[true, false]));
+      expect(dispatcher.reloadingListenable.value, isFalse);
+      expect(dispatcher.reloadingListenable.value, dispatcher.isReloading);
+
+      dispatcher.dispose();
+    });
+
+    // ---- Scenario 3 -------------------------------------------------------
+    test('loadMore_doesNotToggleReloadingListenable', () async {
+      // Arrange — seed items so hasMore == true.
+      final dispatcher = _buildDispatcher();
+      final seedLoader = FakeLoader<List<int>>();
+      seedLoader.enqueueValue(<int>[1, 2]);
+      await dispatcher.reload(
+        params: const _TestParams(),
+        load: seedLoader.call,
+      );
+      expect(dispatcher.hasMore, isTrue);
+
+      final recorded = _recordReloading(dispatcher);
+      final gate = Completer<List<int>>();
+      Future<List<int>> slowLoad(_TestParams _) => gate.future;
+
+      // Act
+      final future = dispatcher.loadMore(
+        params: const _TestParams(),
+        load: slowLoad,
+      );
+
+      // Assert — loadMore is not a reload.
+      expect(dispatcher.isLoadingMore, isTrue);
+      expect(dispatcher.reloadingListenable.value, isFalse);
+      expect(recorded, isEmpty);
+
+      // Act — complete.
+      gate.complete(<int>[3]);
+      await future;
+
+      // Assert — still silent.
+      expect(recorded, isEmpty);
+      expect(dispatcher.reloadingListenable.value, isFalse);
+
+      dispatcher.dispose();
+    });
+
+    // ---- Scenario 4 -------------------------------------------------------
+    // The reason this channel exists: loadingListenable carries the derived
+    // `reloading || loadingMore`, so a reload starting during a loadMore does
+    // not change its value and emits nothing — while isReloading does flip.
+    test('loadMoreThenReload_reloadingFires_whileLoadingListenableStaysSilent',
+        () async {
+      // Arrange — seed items, then start a gated loadMore.
+      final dispatcher = _buildDispatcher();
+      final seedLoader = FakeLoader<List<int>>();
+      seedLoader.enqueueValue(<int>[1, 2]);
+      await dispatcher.reload(
+        params: const _TestParams(),
+        load: seedLoader.call,
+      );
+
+      final moreGate = Completer<List<int>>();
+      final loadMoreFuture = dispatcher.loadMore(
+        params: const _TestParams(),
+        load: (_) => moreGate.future,
+      );
+      expect(dispatcher.isLoadingMore, isTrue);
+      expect(dispatcher.loadingListenable.value, isTrue);
+
+      // Arrange — subscribe only now, so both records start empty.
+      final recordedLoading = _recordLoading(dispatcher);
+      final recordedReloading = _recordReloading(dispatcher);
+
+      // Act — a reload starts while the loadMore is still in flight.
+      final reloadGate = Completer<List<int>>();
+      final reloadFuture = dispatcher.reload(
+        params: const _TestParams(),
+        load: (_) => reloadGate.future,
+      );
+
+      // Assert — the derived channel saw no change, the precise one did.
+      expect(recordedLoading, isEmpty,
+          reason: 'true || x stayed true — loadingListenable cannot see this');
+      expect(recordedReloading, equals(<bool>[true]),
+          reason: 'isReloading went false -> true and must be observable');
+      expect(dispatcher.isReloading, isTrue);
+      expect(dispatcher.isLoadingMore, isFalse);
+
+      // Cleanup — release both gates.
+      moreGate.complete(<int>[3]);
+      reloadGate.complete(<int>[4, 5]);
+      await loadMoreFuture;
+      await reloadFuture;
+
+      expect(recordedReloading, equals(<bool>[true, false]));
+
+      dispatcher.dispose();
+    });
+
+    // ---- Scenario 5 -------------------------------------------------------
+    test('dispose_releasesReloadingListenable', () {
+      // Arrange
+      final dispatcher = _buildDispatcher();
+
+      // Act
+      dispatcher.dispose();
+
+      // Assert
+      expect(
+        () => dispatcher.reloadingListenable.addListener(() {}),
+        throwsA(isA<FlutterError>()),
+      );
     });
   });
 }
