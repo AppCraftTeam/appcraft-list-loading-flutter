@@ -1,5 +1,8 @@
 // ignore_for_file: cascade_invocations, unused_element_parameter, prefer_const_constructors
+import 'dart:async';
+
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/fake_loader.dart';
@@ -378,6 +381,217 @@ void main() {
       // Assert — same member, now carrying the edge page.
       expect(dispatcher.lastResultOlder!.items, equals(<int>[6, 5]));
       expect(dispatcher.lastResultNewer!.items, equals(<int>[10, 11]));
+    });
+  });
+
+  // =====================================================================
+  // US4 — derived state channels
+  // =====================================================================
+  group('ACAnchoredDispatcher — derived state channels (US4/016)', () {
+    late ACAnchoredDispatcher<_Params, _Page, int> dispatcher;
+
+    setUp(() {
+      dispatcher = _build();
+    });
+
+    tearDown(() {
+      dispatcher.dispose();
+    });
+
+    test('freshDispatcher_isReloadingAnyFalse_lastErrorAnyNull', () {
+      // Assert
+      expect(dispatcher.isReloadingAny, isFalse);
+      expect(dispatcher.reloadingAnyListenable.value, isFalse);
+      expect(dispatcher.lastErrorAny, isNull);
+      expect(dispatcher.errorAnyListenable.value, isNull);
+    });
+
+    test('isReloadingAny_trueWhileSeedingOlder', () async {
+      // Arrange
+      final gate = Completer<_Page>();
+
+      // Act
+      final future = dispatcher.reloadOlder(
+        params: const _Params(),
+        load: (_) => gate.future,
+      );
+
+      // Assert — in flight.
+      expect(dispatcher.isReloadingAny, isTrue);
+      expect(dispatcher.reloadingAnyListenable.value, isTrue);
+
+      // Act — complete.
+      gate.complete(const _Page(items: <int>[9, 8], hasMore: false));
+      await future;
+
+      // Assert — back to idle.
+      expect(dispatcher.isReloadingAny, isFalse);
+      expect(dispatcher.reloadingAnyListenable.value, isFalse);
+    });
+
+    test('isReloadingAny_trueWhileSeedingNewer', () async {
+      // Arrange
+      final gate = Completer<_Page>();
+
+      // Act
+      final future = dispatcher.reloadNewer(
+        params: const _Params(),
+        load: (_) => gate.future,
+      );
+
+      // Assert
+      expect(dispatcher.isReloadingAny, isTrue);
+
+      // Cleanup
+      gate.complete(const _Page(items: <int>[10], hasMore: false));
+      await future;
+      expect(dispatcher.isReloadingAny, isFalse);
+    });
+
+    test('isReloadingAny_falseDuringEdgeLoad', () async {
+      // Arrange — seed so hasMoreOlder == true, then gate an edge load.
+      await dispatcher.reloadOlder(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[9, 8], hasMore: true),
+      );
+      final gate = Completer<_Page>();
+
+      // Act
+      final future = dispatcher.loadOlder(
+        params: const _Params(),
+        load: (_) => gate.future,
+      );
+
+      // Assert — loadMore is not a seed: the initial-load flag stays down.
+      expect(dispatcher.isLoadingOlder, isTrue);
+      expect(dispatcher.isReloadingAny, isFalse);
+      expect(dispatcher.reloadingAnyListenable.value, isFalse);
+
+      // Cleanup
+      gate.complete(const _Page(items: <int>[7], hasMore: false));
+      await future;
+    });
+
+    test('reloadingAnyListenable_notifiesOnTransitions', () async {
+      // Arrange
+      final recorded = <bool>[];
+      dispatcher.reloadingAnyListenable.addListener(
+        () => recorded.add(dispatcher.reloadingAnyListenable.value),
+      );
+
+      // Act
+      await dispatcher.reloadOlder(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[9], hasMore: false),
+      );
+
+      // Assert
+      expect(recorded, equals(<bool>[true, false]));
+    });
+
+    test('lastErrorAny_capturesFailedSeed_andErrorPropagates', () async {
+      // Arrange
+      final failure = Exception('boom');
+
+      // Act & Assert — the exception leaves through the returned Future.
+      await expectLater(
+        dispatcher.reloadOlder(
+          params: const _Params(),
+          load: (_) async => throw failure,
+        ),
+        throwsA(same(failure)),
+      );
+
+      // Assert — and lands in both the per-side and the derived channel.
+      expect(dispatcher.lastErrorOlder, same(failure));
+      expect(dispatcher.lastErrorAny, same(failure));
+      expect(dispatcher.errorAnyListenable.value, same(failure));
+    });
+
+    test('lastErrorAny_staysNonNullWhileEitherSideHoldsAnError', () async {
+      // Arrange — the older side fails.
+      final failure = Exception('older failed');
+      await expectLater(
+        dispatcher.reloadOlder(
+          params: const _Params(),
+          load: (_) async => throw failure,
+        ),
+        throwsA(same(failure)),
+      );
+
+      // Act — the newer side succeeds.
+      await dispatcher.reloadNewer(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[10], hasMore: false),
+      );
+
+      // Assert — a success on one side must not hide the other's error.
+      expect(dispatcher.lastErrorNewer, isNull);
+      expect(dispatcher.lastErrorAny, same(failure));
+    });
+
+    test('retryOlder_repeatsSeed_andClearsErrorAny', () async {
+      // Arrange — first call fails, second succeeds.
+      final failure = Exception('transient');
+      final loader = FakeLoader<_Page>();
+      loader.enqueueError(failure);
+      loader.enqueueValue(const _Page(items: <int>[9, 8], hasMore: false));
+
+      await expectLater(
+        dispatcher.reloadOlder(params: const _Params(), load: loader.call),
+        throwsA(same(failure)),
+      );
+      expect(dispatcher.lastErrorAny, same(failure));
+
+      // Act — retry repeats the captured seed operation.
+      await dispatcher.retryOlder();
+
+      // Assert
+      expect(loader.callCount, 2);
+      expect(dispatcher.itemsOlder, equals(<int>[9, 8]));
+      expect(dispatcher.lastErrorAny, isNull);
+      expect(dispatcher.errorAnyListenable.value, isNull);
+    });
+
+    test('errorAnyListenable_notifiesOnChange', () async {
+      // Arrange
+      final recorded = <Object?>[];
+      dispatcher.errorAnyListenable.addListener(
+        () => recorded.add(dispatcher.errorAnyListenable.value),
+      );
+      final failure = Exception('boom');
+      final loader = FakeLoader<_Page>();
+      loader.enqueueError(failure);
+      loader.enqueueValue(const _Page(items: <int>[9], hasMore: false));
+
+      // Act
+      await expectLater(
+        dispatcher.reloadNewer(params: const _Params(), load: loader.call),
+        throwsA(same(failure)),
+      );
+      await dispatcher.retryNewer();
+
+      // Assert
+      expect(recorded, equals(<Object?>[failure, null]));
+    });
+
+    test('dispose_releasesDerivedChannels_andIsIdempotent', () {
+      // Arrange
+      final local = _build();
+
+      // Act
+      local.dispose();
+      local.dispose(); // idempotent
+
+      // Assert
+      expect(
+        () => local.reloadingAnyListenable.addListener(() {}),
+        throwsA(isA<FlutterError>()),
+      );
+      expect(
+        () => local.errorAnyListenable.addListener(() {}),
+        throwsA(isA<FlutterError>()),
+      );
     });
   });
 }

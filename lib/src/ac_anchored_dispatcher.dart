@@ -64,6 +64,10 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   ACAnchoredDispatcher() {
     _older.addListener(_onSide);
     _newer.addListener(_onSide);
+    _older.reloadingListenable.addListener(_onReloading);
+    _newer.reloadingListenable.addListener(_onReloading);
+    _older.errorListenable.addListener(_onError);
+    _newer.errorListenable.addListener(_onError);
   }
 
   // Both sides are built with a neutralised search strategy. `reloadOlder` /
@@ -91,10 +95,28 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   final ValueNotifier<bool> _aroundLoading = ValueNotifier<bool>(false);
   final ValueNotifier<Object?> _aroundError = ValueNotifier<Object?>(null);
   ACAnchoredPage<T>? _lastAround;
+  final ValueNotifier<bool> _reloadingAny = ValueNotifier<bool>(false);
+  final ValueNotifier<Object?> _errorAny = ValueNotifier<Object?>(null);
 
   /// Forwards a side's item-change notification, unless disposed.
   void _onSide() {
     if (!_disposed) notifyListeners();
+  }
+
+  /// Recomputes [isReloadingAny] from both sides' reload flags.
+  ///
+  /// Subscribed to each side's `reloadingListenable` rather than its
+  /// `loadingListenable`: the latter carries the derived
+  /// `reloading || loadingMore` and stays silent when a seed starts on top of
+  /// an in-flight edge load, which would leave this channel out of sync with
+  /// the [isReloadingAny] getter.
+  void _onReloading() {
+    if (!_disposed) _reloadingAny.value = isReloadingAny;
+  }
+
+  /// Recomputes [lastErrorAny] from both sides' error channels.
+  void _onError() {
+    if (!_disposed) _errorAny.value = lastErrorAny;
   }
 
   // ---------------------------------------------------------------------------
@@ -328,6 +350,38 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   /// Whether an around-load is in progress.
   bool get isLoadingAround => _aroundLoading.value;
 
+  /// Whether a **seed** ([reloadOlder] or [reloadNewer]) is running on either
+  /// side.
+  ///
+  /// Deliberately blind to [loadOlder] / [loadNewer]: it answers «is the
+  /// window still being built», which is what an initial-load spinner needs.
+  /// Edge spinners are driven by [loadingOlderListenable] /
+  /// [loadingNewerListenable] instead.
+  bool get isReloadingAny => _older.isReloading || _newer.isReloading;
+
+  /// Reactive channel mirroring [isReloadingAny].
+  ///
+  /// Independent of the `notifyListeners` contract: a change here does not
+  /// notify the dispatcher's own subscribers. Released by [dispose].
+  ValueListenable<bool> get reloadingAnyListenable => _reloadingAny;
+
+  /// The last error held by either side, or `null` when both are clear.
+  ///
+  /// Equals `lastErrorOlder ?? lastErrorNewer`: it stays non-`null` while **at
+  /// least one** side holds an error, so a success on one side cannot hide a
+  /// failure on the other. When both sides hold an error the older one wins —
+  /// an arbitrary but stable choice.
+  ///
+  /// Not split by operation kind: the per-side error channel does not
+  /// distinguish a seed from an edge load either. For a targeted reaction use
+  /// [lastErrorOlder] / [lastErrorNewer] with [retryOlder] / [retryNewer].
+  Object? get lastErrorAny => _older.lastError ?? _newer.lastError;
+
+  /// Reactive channel mirroring [lastErrorAny].
+  ///
+  /// Independent of the `notifyListeners` contract. Released by [dispose].
+  ValueListenable<Object?> get errorAnyListenable => _errorAny;
+
   /// Reactive channel mirroring [isLoadingOlder].
   ValueListenable<bool> get loadingOlderListenable => _older.loadingListenable;
 
@@ -420,8 +474,14 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
 
     _older.removeListener(_onSide);
     _newer.removeListener(_onSide);
+    _older.reloadingListenable.removeListener(_onReloading);
+    _newer.reloadingListenable.removeListener(_onReloading);
+    _older.errorListenable.removeListener(_onError);
+    _newer.errorListenable.removeListener(_onError);
     _older.dispose();
     _newer.dispose();
+    _reloadingAny.dispose();
+    _errorAny.dispose();
     _aroundLoading.dispose();
     _aroundError.dispose();
     _aroundCancel?.cancel().ignore();
