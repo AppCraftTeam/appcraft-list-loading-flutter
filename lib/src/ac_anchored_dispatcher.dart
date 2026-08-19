@@ -44,6 +44,13 @@ import 'ac_search_debouncer.dart';
 /// gate): search is not a concept here, and the seeds must never be delayed
 /// or turned into a silent clear by the query carried in `params`.
 ///
+/// Changing the anchor means seeding **both** sides again: each seed cancels
+/// its own side's in-flight load and discards its late answer as stale, so no
+/// leftover from the previous anchor can land. Seeding only one side is a
+/// legitimate call, not a race — the dispatcher does not track which anchor a
+/// side was seeded from, so keeping the two sides in agreement is the
+/// caller's responsibility.
+///
 /// Notifications: the dispatcher extends [ChangeNotifier] and forwards a
 /// notification whenever **either side's items change** (subscribed via the
 /// sides' own `notifyListeners`). Changing only the loading flags or the

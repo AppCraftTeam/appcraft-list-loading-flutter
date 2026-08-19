@@ -594,4 +594,109 @@ void main() {
       );
     });
   });
+
+  // =====================================================================
+  // US5 — changing the anchor leaves no split-brain window
+  // =====================================================================
+  group('ACAnchoredDispatcher — anchor change and staleness (US5/016)', () {
+    late ACAnchoredDispatcher<_Params, _Page, int> dispatcher;
+
+    setUp(() {
+      dispatcher = _build();
+    });
+
+    tearDown(() {
+      dispatcher.dispose();
+    });
+
+    test('secondSeed_supersedesFirst_lateResultIsDiscarded', () async {
+      // Arrange — two gated seeds on the same side.
+      final firstGate = Completer<_Page>();
+      final secondGate = Completer<_Page>();
+      var notifications = 0;
+      dispatcher.addListener(() => notifications++);
+
+      final first = dispatcher.reloadOlder(
+        params: const _Params(),
+        load: (_) => firstGate.future,
+      );
+      final second = dispatcher.reloadOlder(
+        params: const _Params(),
+        load: (_) => secondGate.future,
+      );
+
+      // Act — the superseded load answers first, then the live one.
+      firstGate.complete(const _Page(items: <int>[99, 98], hasMore: true));
+      await first;
+
+      // Assert — the stale answer wrote nothing and notified nobody.
+      expect(dispatcher.itemsOlder, isEmpty);
+      expect(notifications, 0);
+
+      // Act — the live load resolves.
+      secondGate.complete(const _Page(items: <int>[9, 8], hasMore: false));
+      await second;
+
+      // Assert
+      expect(dispatcher.itemsOlder, equals(<int>[9, 8]));
+      expect(dispatcher.hasMoreOlder, isFalse);
+      expect(notifications, 1);
+    });
+
+    test('reseedingBothSides_replacesWindowEntirely', () async {
+      // Arrange — a window around anchor A.
+      await _seedWindow(dispatcher);
+      expect(dispatcher.items, equals(<int>[7, 8, 9, 10, 11]));
+
+      // Act — reseed both sides around anchor B.
+      await dispatcher.reloadOlder(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[41, 40], hasMore: true),
+      );
+      await dispatcher.reloadNewer(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[42, 43], hasMore: true),
+      );
+
+      // Assert — nothing from anchor A survived.
+      expect(dispatcher.itemsOlder, equals(<int>[41, 40]));
+      expect(dispatcher.itemsNewer, equals(<int>[42, 43]));
+      expect(dispatcher.items, equals(<int>[40, 41, 42, 43]));
+    });
+
+    test('seedingWithShortQuery_stillLoads_doesNotClearSide', () async {
+      // Regression guard for the neutralised search strategy: with the
+      // default debouncer a non-empty query shorter than minLength (3) is a
+      // rejection — the side would be cleared and the loader never called.
+      final loader = FakeLoader<_Page>();
+      loader.enqueueValue(const _Page(items: <int>[9, 8], hasMore: false));
+
+      // Act
+      await dispatcher.reloadOlder(
+        params: const _Params(query: 'ab'),
+        load: loader.call,
+      );
+
+      // Assert
+      expect(loader.callCount, 1);
+      expect(dispatcher.itemsOlder, equals(<int>[9, 8]));
+    });
+
+    test('seedingWithLongQuery_isNotDebounced', () async {
+      // With the default 300ms debounce this would not have resolved by the
+      // time the awaited future returns.
+      final loader = FakeLoader<_Page>();
+      loader.enqueueValue(const _Page(items: <int>[10], hasMore: false));
+
+      // Act
+      await dispatcher.reloadNewer(
+        params: const _Params(query: 'a long enough query'),
+        load: loader.call,
+      );
+
+      // Assert
+      expect(loader.callCount, 1);
+      expect(dispatcher.itemsNewer, equals(<int>[10]));
+    });
+  });
 }
