@@ -13,6 +13,61 @@ Template for future CHANGELOG.md entries:
 - Each change is a separate bullet, without unnecessary implementation details.
 -->
 
+## 1.1.0
+
+> Migration from 1.0.0 → 1.1.0: see [MIGRATION.md](MIGRATION.md).
+
+### Added
+
+- `ACAnchoredDispatcher.reloadOlder` / `reloadNewer` — seed each side of a
+  window around an anchor with a plain `ACPage`. Each replaces its side's
+  items, takes `hasMore` from its own page, cancels that side's in-flight load
+  and discards a late answer as stale. A window is composed by the caller out
+  of the two seeds: the request count, their concurrency and the handling of a
+  one-sided failure stay outside the package.
+- `ACAnchoredDispatcher.isReloadingAny` / `reloadingAnyListenable` — true while
+  either side is being seeded, and deliberately blind to `loadOlder` /
+  `loadNewer`, so an initial-load spinner does not flicker on scroll.
+- `ACAnchoredDispatcher.lastErrorAny` / `errorAnyListenable` — the last error
+  held by either side; stays non-null while at least one side has one, so a
+  success on one side cannot hide a failure on the other.
+- `ACLoadingDispatcher.reloadingListenable` — a reactive channel mirroring
+  `isReloading` alone. Unlike `loadingListenable`, which carries the derived
+  `isReloading || isLoadingMore`, it still fires when a `reload` starts on top
+  of an in-flight `loadMore`. Available in `ACListDispatcher` and
+  `ACPageDispatcher` too.
+
+### Fixed
+
+- A window around an anchor is now expressible at all. `loadAround`
+  unconditionally cleared the older side, so after an around-load that side was
+  guaranteed empty whatever the loader returned; when the anchor was the last
+  item of a feed the window collapsed to a single element and the history sat
+  beyond the edge.
+- `lastResultOlder` / `lastResultNewer` are populated right after the window is
+  seeded, because the seeds are real loads. The initial cursors are read from
+  the same members as every subsequent one — `lastAround` is no longer needed
+  for that.
+- `retryOlder` / `retryNewer` now repeat a seed as well as an edge load.
+- The per-side search strategy is neutralised inside `ACAnchoredDispatcher`: a
+  non-empty query shorter than the default `minLength` carried in `params`
+  would otherwise have turned a seed into a silent clear of the side.
+
+### Deprecated
+
+Scheduled for removal in `2.0.0`; behaviour is unchanged and existing code
+keeps compiling.
+
+- `ACAnchoredDispatcher.loadAround` — use `reloadOlder` + `reloadNewer`.
+- `ACAnchoredPage<T>` — use `ACPage<T>` on each side. It carries a single list
+  and therefore cannot express a window around an anchor; its documentation
+  claimed otherwise and has been corrected.
+- `lastAround` — use `lastResultOlder` / `lastResultNewer`.
+- `isLoadingAround` — use `isReloadingAny`.
+- `loadingAroundListenable` — use `reloadingAnyListenable`.
+- `lastErrorAround` — use `lastErrorAny`.
+- `errorAroundListenable` — use `errorAnyListenable`.
+
 ## 1.0.0
 
 > Migration from 0.2.0 → 1.0.0: see [MIGRATION.md](MIGRATION.md).

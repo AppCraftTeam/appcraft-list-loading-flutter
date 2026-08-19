@@ -34,7 +34,8 @@ without imposing any specific state-management library (both dispatchers extend
   manual `hasMore` setter, on both dispatchers.
 - Bidirectional, anchor-based pagination for chat/feed via
   `ACAnchoredDispatcher` (a composition of two `ACPageDispatcher`s):
-  `loadAround` / `loadOlder` / `loadNewer`, separate `itemsOlder` / `itemsNewer`
+  `reloadOlder` / `reloadNewer` / `loadOlder` / `loadNewer`, separate
+  `itemsOlder` / `itemsNewer`
   for a jump-free `CustomScrollView(center:)` plus a merged `items`, fully
   per-side state and realtime `mutateOlder` / `mutateNewer`.
 
@@ -247,35 +248,14 @@ full loading engine (cancellation, staleness guards, `isLoading`, `lastResult`,
 error channels, `retry`, `mutate`); this class only orchestrates the anchor
 load and exposes a merged list view. It extends `ChangeNotifier`.
 
-The around-load returns an `ACAnchoredPage<T>` — an around-page model that
-carries **both** directional flags at once (`hasMoreOlder` / `hasMoreNewer`),
-unlike the per-side `ACPage` whose `hasMore` means "is there more on **this**
-side". `loadOlder` / `loadNewer` keep using a plain `ACPage` DTO.
+Every load — seeding a side or growing it from its edge — uses the same
+per-side `ACPage` DTO, whose `hasMore` means "is there more **beyond this
+side's edge**".
 
 ```dart
 import 'package:appcraft_list_loading_flutter/appcraft_list_loading_flutter.dart';
 
-// around-page (for loadAround) — carries both flags
-final class ChatAround with ACAnchoredPage<Msg> {
-  const ChatAround({
-    required this.items,
-    required this.hasMoreOlder,
-    required this.hasMoreNewer,
-    this.olderCursor,
-    this.newerCursor,
-  });
-
-  @override
-  final List<Msg> items;
-  @override
-  final bool hasMoreOlder;
-  @override
-  final bool hasMoreNewer;
-  final String? olderCursor; // initial cursors — read back via lastAround
-  final String? newerCursor;
-}
-
-// side-page (for loadOlder/loadNewer) — hasMore = "more on THIS side"
+// side-page — used by reloadOlder/reloadNewer and loadOlder/loadNewer alike
 final class ChatPage with ACPage<Msg> {
   const ChatPage({required this.items, required this.hasMore, this.cursor});
 
@@ -287,51 +267,78 @@ final class ChatPage with ACPage<Msg> {
 }
 ```
 
-#### Start around the anchor — `loadAround`
+#### Seed the window — `reloadOlder` + `reloadNewer`
 
-`loadAround` runs its own orchestration: it cancels any previous around-load
-and **both** sides, seeds the central page into the newer side, clears the
-older side and applies both `hasMore` flags. The central page is stored in
-`lastAround`. A failing loader still **throws** (kept in `lastErrorAround`).
+A window around an anchor is composed by **you** out of two independent seeds.
+Each one replaces its side's items, takes `hasMore` from its own page, cancels
+that side's in-flight load and discards its late answer as stale. How many
+requests the window costs, whether the seeds run sequentially or concurrently,
+and what happens when only one of them fails — all yours to decide.
 
 ```dart
 final d = ACAnchoredDispatcher<ChatParams, ChatPage, Msg>();
 
-await d.loadAround(
-  params: ChatParams(anchorId: firstUnreadId),
-  load: (p) => api.fetchAround(p.anchorId), // -> ChatAround
-);
-// d.itemsNewer == the centred window; d.itemsOlder == [];
-// d.hasMoreOlder / d.hasMoreNewer come from the response.
+await Future.wait([
+  // older half — closest-older -> oldest, the order loadOlder also appends in
+  d.reloadOlder(
+    params: ChatParams(anchorId: firstUnreadId, direction: Direction.previous),
+    load: api.fetchMessages,
+  ),
+  // newer half — anchor -> newest; the anchor belongs to this side
+  d.reloadNewer(
+    params: ChatParams(anchorId: firstUnreadId, direction: Direction.next),
+    load: api.fetchMessages,
+  ),
+]);
+// d.itemsOlder == [m9, m8, m7]; d.itemsNewer == [m10, m11];
+// d.items == [m7, m8, m9, m10, m11]
 ```
+
+Nothing is reversed inside the package: if your server returns history
+chronologically, reverse it before handing it to `reloadOlder`.
+
+Seeding one side leaves the other untouched — which also means that after
+changing the anchor you should seed **both** sides. The dispatcher does not
+track which anchor a side was seeded from.
 
 #### Grow up/down — `loadOlder` / `loadNewer`
 
-Each side delegates to its dispatcher's `loadMore` (the `!hasMore` / `isLoading`
-guards and one-shot `force` apply). Cursors are managed manually: the initial
-ones come from `lastAround`, subsequent ones from `lastResultOlder` /
-`lastResultNewer`.
+Each side delegates to its dispatcher's `loadMore` (the `!hasMore` /
+`isLoading` guards and one-shot `force` apply). Cursors are managed manually
+and read uniformly from `lastResultOlder` / `lastResultNewer` — the seeds
+commit them just like the edge loads do, so there is no separate source for
+the first page.
 
 ```dart
 if (d.hasMoreOlder) {
   await d.loadOlder(
-    params: ChatParams(
-      cursor: d.lastResultOlder?.cursor ??
-          (d.lastAround as ChatAround?)?.olderCursor,
-    ),
-    load: (p) => api.fetchOlder(p.cursor), // hasMore = "more older"
+    params: ChatParams(cursor: d.lastResultOlder?.cursor),
+    load: api.fetchMessages, // hasMore = "more beyond the older edge"
   );
 }
 if (d.hasMoreNewer) {
   await d.loadNewer(
-    params: ChatParams(
-      cursor: d.lastResultNewer?.cursor ??
-          (d.lastAround as ChatAround?)?.newerCursor,
-    ),
-    load: (p) => api.fetchNewer(p.cursor), // hasMore = "more newer"
+    params: ChatParams(cursor: d.lastResultNewer?.cursor),
+    load: api.fetchMessages, // hasMore = "more beyond the newer edge"
   );
 }
 ```
+
+#### Initial-load state — `isReloadingAny` / `lastErrorAny`
+
+`isReloadingAny` is `true` while **either** side is being seeded and stays
+`false` during edge loads, so it drives the initial spinner without flickering
+on scroll. `lastErrorAny` holds an error while at least one side has one — a
+success on one side cannot hide a failure on the other. Both have reactive
+channels (`reloadingAnyListenable`, `errorAnyListenable`); for a targeted
+reaction use the per-side `lastErrorOlder` / `lastErrorNewer` with
+`retryOlder` / `retryNewer`, which repeat the seed as well as the edge load.
+
+> **Deprecated since 1.1.0:** `loadAround` and the `ACAnchoredPage` model.
+> Despite its name `loadAround` could never build a window — it always cleared
+> the older side — so a window around an anchor was not expressible. Use the
+> two seeds above; removal is planned for 2.0.0. See
+> [MIGRATION.md](MIGRATION.md).
 
 #### Two lists for `CustomScrollView(center:)` — no scroll jumps
 
@@ -378,12 +385,14 @@ d.mutateNewer((items) => items                                   // optimistic �
 
 Loading, error and retry state is fully **per side** and independent — a load
 or a failure on one side never touches the other:
-`isLoadingOlder` / `isLoadingNewer` / `isLoadingAround`,
-`loadingOlderListenable` / `loadingNewerListenable` / `loadingAroundListenable`,
-`lastErrorOlder` / `lastErrorNewer` / `lastErrorAround` (with matching
-`errorOlderListenable` / `errorNewerListenable` / `errorAroundListenable`),
-`retryOlder()` / `retryNewer()`, and `lastResultOlder` / `lastResultNewer` /
-`lastAround`.
+`isLoadingOlder` / `isLoadingNewer`,
+`loadingOlderListenable` / `loadingNewerListenable`,
+`lastErrorOlder` / `lastErrorNewer` (with matching
+`errorOlderListenable` / `errorNewerListenable`),
+`retryOlder()` / `retryNewer()`, and `lastResultOlder` / `lastResultNewer`.
+
+Across both sides there are the derived `isReloadingAny` / `lastErrorAny` and
+their channels — see [Initial-load state](#initial-load-state--isreloadingany--lasterrorany).
 
 ```dart
 ValueListenableBuilder<bool>(
@@ -791,23 +800,28 @@ it from the hooks only when the collection actually changes.
   metadata).
 - `ACAnchoredDispatcher<P, R, T>` — bidirectional, anchor-centred dispatcher
   for chat/feed pagination, built as a composition of two `ACPageDispatcher`s.
-  `loadAround` seeds the window around an anchor; `loadOlder` / `loadNewer`
-  grow each side independently. Exposes the separate `itemsOlder` / `itemsNewer`
-  (for a `CustomScrollView(center:)` without scroll jumps) and a merged read-only
-  `items`, fully per-side state (`isLoadingOlder/Newer/Around`, `hasMoreOlder/Newer`,
-  `lastError*` / `error*Listenable`, `loading*Listenable`, `lastResultOlder/Newer`,
-  `lastAround`, `retryOlder/Newer`), realtime `mutateOlder` / `mutateNewer`, plus
-  `cancel` and an idempotent `dispose`.
-- `ACAnchoredPage<T>` — around-page contract mixin (`items`, `hasMoreOlder`,
-  `hasMoreNewer`) returned by `ACAnchoredDispatcher.loadAround`; carries both
-  directional flags at once.
+  `reloadOlder` / `reloadNewer` seed each side of a window around an anchor;
+  `loadOlder` / `loadNewer` grow each side independently. Exposes the separate
+  `itemsOlder` / `itemsNewer` (for a `CustomScrollView(center:)` without scroll
+  jumps) and a merged read-only `items`, fully per-side state
+  (`isLoadingOlder/Newer`, `hasMoreOlder/Newer`, `lastError*` /
+  `error*Listenable`, `loading*Listenable`, `lastResultOlder/Newer`,
+  `retryOlder/Newer`), the derived `isReloadingAny` / `lastErrorAny` with their
+  channels, realtime `mutateOlder` / `mutateNewer`, plus `cancel` and an
+  idempotent `dispose`.
+- `ACAnchoredPage<T>` — **deprecated since 1.1.0**, removal planned for 2.0.0.
+  Around-page contract mixin (`items`, `hasMoreOlder`, `hasMoreNewer`) used by
+  the deprecated `loadAround`. It carries a single list, so it cannot express a
+  window around an anchor — seed each side with `ACPage` instead.
 - `ACLoadingDispatcher<Params, T>` — the abstract loading engine shared by
   both dispatchers. Owns the loading lifecycle (`reload`, `loadMore`,
   `cancel`, `dispose`, `isLoading`, `lastResult`); subclasses provide the
   collection state and the `hasMore` / `onLoadSuccess` / `onLoadRejected`
   hooks. Public extension point for non-standard pagination. Also exposes
   `loadingListenable` (a `ValueListenable<bool>` mirroring `isLoading` for
-  reactive spinners) and the synchronous granular flags `isReloading` /
+  reactive spinners), `reloadingListenable` (mirrors `isReloading` alone, and
+  unlike `loadingListenable` still fires when a reload starts on top of an
+  in-flight `loadMore`) and the synchronous granular flags `isReloading` /
   `isLoadingMore`, plus the built-in error state — `lastError` (synchronous),
   `errorListenable` (a `ValueListenable<Object?>`), `retry()` (repeat the last
   operation) and `lastOperation` (introspection) — inherited by both

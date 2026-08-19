@@ -1,3 +1,6 @@
+// ignore_for_file: deprecated_member_use_from_same_package — this file
+// covers the deprecated around-API, whose behaviour stays under test
+// until it is removed in 2.0.0.
 // ignore_for_file: cascade_invocations, unused_element_parameter, prefer_const_constructors
 import 'dart:async';
 
