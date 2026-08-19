@@ -101,6 +101,8 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   ACCancelStrategy? _aroundCancel;
   final ValueNotifier<bool> _aroundLoading = ValueNotifier<bool>(false);
   final ValueNotifier<Object?> _aroundError = ValueNotifier<Object?>(null);
+  // ignore: deprecated_member_use_from_same_package — backing field of the
+  // deprecated loadAround, kept until its removal in 2.0.0.
   ACAnchoredPage<T>? _lastAround;
   final ValueNotifier<bool> _reloadingAny = ValueNotifier<bool>(false);
   final ValueNotifier<Object?> _errorAny = ValueNotifier<Object?>(null);
@@ -171,8 +173,14 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   /// [cancelStrategy] — an optional cancellation strategy for this load;
   /// otherwise a fresh [ACOperationCancelStrategy] is used. A no-op after
   /// [dispose].
+  @Deprecated(
+    'Cannot build a window around an anchor: the older side is always '
+    'cleared. Use reloadOlder + reloadNewer. Will be removed in 2.0.0.',
+  )
   Future<void> loadAround({
     required P params,
+    // ignore: deprecated_member_use_from_same_package — the deprecated
+    // method necessarily keeps the deprecated model in its signature.
     required Future<ACAnchoredPage<T>> Function(P params) load,
     ACCancelStrategy? cancelStrategy,
   }) async {
@@ -354,7 +362,8 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   /// Whether a newer-side load is in progress.
   bool get isLoadingNewer => _newer.isLoading;
 
-  /// Whether an around-load is in progress.
+  /// Whether a deprecated `loadAround` is in progress.
+  @Deprecated('Use isReloadingAny. Will be removed in 2.0.0.')
   bool get isLoadingAround => _aroundLoading.value;
 
   /// Whether a **seed** ([reloadOlder] or [reloadNewer]) is running on either
@@ -395,7 +404,8 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   /// Reactive channel mirroring [isLoadingNewer].
   ValueListenable<bool> get loadingNewerListenable => _newer.loadingListenable;
 
-  /// Reactive channel mirroring [isLoadingAround].
+  /// Reactive channel mirroring the deprecated `isLoadingAround`.
+  @Deprecated('Use reloadingAnyListenable. Will be removed in 2.0.0.')
   ValueListenable<bool> get loadingAroundListenable => _aroundLoading;
 
   /// The last page returned by [reloadOlder] or [loadOlder], or `null`.
@@ -413,7 +423,11 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   /// side without loading it and therefore leaves this `null`.
   R? get lastResultNewer => _newer.lastResult;
 
-  /// The last around-page seeded by [loadAround], or `null`.
+  /// The last around-page seeded by the deprecated `loadAround`, or `null`.
+  @Deprecated(
+    'Read cursors from lastResultOlder / lastResultNewer, which the seeds '
+    'now commit. Will be removed in 2.0.0.',
+  )
   ACAnchoredPage<T>? get lastAround => _lastAround;
 
   /// The error thrown by the last [loadOlder], or `null` if it succeeded.
@@ -422,7 +436,8 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   /// The error thrown by the last [loadNewer], or `null` if it succeeded.
   Object? get lastErrorNewer => _newer.lastError;
 
-  /// The error thrown by the last [loadAround], or `null` if it succeeded.
+  /// The error thrown by the last `loadAround`, or `null` if it succeeded.
+  @Deprecated('Use lastErrorAny. Will be removed in 2.0.0.')
   Object? get lastErrorAround => _aroundError.value;
 
   /// Reactive channel mirroring [lastErrorOlder].
@@ -431,7 +446,8 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   /// Reactive channel mirroring [lastErrorNewer].
   ValueListenable<Object?> get errorNewerListenable => _newer.errorListenable;
 
-  /// Reactive channel mirroring [lastErrorAround].
+  /// Reactive channel mirroring the deprecated `lastErrorAround`.
+  @Deprecated('Use errorAnyListenable. Will be removed in 2.0.0.')
   ValueListenable<Object?> get errorAroundListenable => _aroundError;
 
   /// Repeats the older side's last captured operation.
