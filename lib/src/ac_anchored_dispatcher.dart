@@ -5,6 +5,7 @@ import 'ac_cancel_strategy.dart';
 import 'ac_page.dart';
 import 'ac_page_dispatcher.dart';
 import 'ac_params.dart';
+import 'ac_search_debouncer.dart';
 
 /// Bidirectional, anchor-centred paginating dispatcher.
 ///
@@ -22,16 +23,26 @@ import 'ac_params.dart';
 /// oldest … ← itemsOlder (reversed) …  ANCHOR  … itemsNewer → … newest
 /// ```
 ///
-/// - [itemsOlder] grows «into the past»: `loadOlder` appends closest-older →
-///   oldest.
-/// - [itemsNewer] grows «into the future»: it is seeded by `loadAround` and
-///   extended by `loadNewer` (anchor → newest).
+/// - [itemsOlder] is seeded by [reloadOlder] and grows «into the past»:
+///   `loadOlder` appends closest-older → oldest.
+/// - [itemsNewer] is seeded by [reloadNewer] and grows «into the future»:
+///   `loadNewer` appends anchor → newest. The anchor belongs to this side.
 /// - [items] is the merged, read-only view `reverse(itemsOlder) ++ itemsNewer`.
 ///
-/// Cursors are managed manually by the consumer: the initial cursors come from
-/// [lastAround], and subsequent ones from [lastResultOlder]/[lastResultNewer].
-/// The `searchStrategy` of the per-side dispatchers is **not** applied — this
-/// dispatcher only uses `loadMore`.
+/// A window around an anchor is composed by the **caller** out of two
+/// independent seeds — [reloadOlder] and [reloadNewer] — in whatever order,
+/// sequentially or concurrently, over one request or two. The dispatcher does
+/// not couple them: it knows nothing about cursors or the server's shape, and
+/// leaves the request count, the concurrency and the handling of a one-sided
+/// failure to the caller.
+///
+/// Cursors are managed manually by the consumer and are read uniformly from
+/// [lastResultOlder]/[lastResultNewer] — both the initial ones (committed by
+/// the seeds) and the subsequent ones.
+///
+/// The per-side `searchStrategy` is neutralised (no debounce, no `minLength`
+/// gate): search is not a concept here, and the seeds must never be delayed
+/// or turned into a silent clear by the query carried in `params`.
 ///
 /// Notifications: the dispatcher extends [ChangeNotifier] and forwards a
 /// notification whenever **either side's items change** (subscribed via the
@@ -55,8 +66,25 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
     _newer.addListener(_onSide);
   }
 
-  final ACPageDispatcher<P, R, T> _older = ACPageDispatcher<P, R, T>();
-  final ACPageDispatcher<P, R, T> _newer = ACPageDispatcher<P, R, T>();
+  // Both sides are built with a neutralised search strategy. `reloadOlder` /
+  // `reloadNewer` go through `ACPageDispatcher.reload`, which gates on
+  // `searchStrategy.schedule(params.query)`; with the default debouncer a
+  // non-empty query shorter than `minLength` would be treated as a rejection
+  // and **clear the side without loading**, and a longer one would be delayed
+  // by 300ms. Search is not a concept for an anchored feed, so the gate is
+  // disarmed rather than left to surprise the caller.
+  final ACPageDispatcher<P, R, T> _older = ACPageDispatcher<P, R, T>(
+    searchStrategy: ACSearchDebouncer(
+      debounce: Duration.zero,
+      minLength: 0,
+    ),
+  );
+  final ACPageDispatcher<P, R, T> _newer = ACPageDispatcher<P, R, T>(
+    searchStrategy: ACSearchDebouncer(
+      debounce: Duration.zero,
+      minLength: 0,
+    ),
+  );
 
   bool _disposed = false;
   ACCancelStrategy? _aroundCancel;
@@ -155,6 +183,81 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
       }
     }
   }
+
+  /// Seeds the older side with a single page — the «older half» of a window
+  /// around an anchor.
+  ///
+  /// Delegates to the older side's `reload`: the side's items are **replaced**
+  /// by `page.items` (not appended), [hasMoreOlder] is read from
+  /// `page.hasMore`, [lastResultOlder] is committed and the merged-list
+  /// notification is forwarded. Any in-flight load on the older side is
+  /// cancelled first, and its late result is discarded as stale.
+  ///
+  /// The page's items must be ordered **closest-older → oldest** — the same
+  /// order in which [loadOlder] grows the side. Nothing is reversed inside the
+  /// package: if the server returns history chronologically, the caller
+  /// reverses it. [items] then reads `reverse(itemsOlder) ++ itemsNewer`, i.e.
+  /// oldest → newest.
+  ///
+  /// Independent of the newer side: this call leaves its items, its
+  /// [hasMoreNewer] flag and its loading state untouched. Building a window
+  /// around an anchor therefore means calling this **and** [reloadNewer] —
+  /// in whatever order, sequentially or concurrently, over one request or
+  /// two. The dispatcher does not couple the two calls: how many requests a
+  /// window costs, and what happens when only one of the two sides fails,
+  /// are the caller's decisions.
+  ///
+  /// Loader exceptions are **propagated outside** and stored in
+  /// [lastErrorOlder]; [isLoadingOlder] is reset via `try/finally`. A
+  /// successful seed clears [lastErrorOlder]. The call is captured as the
+  /// side's last operation, so a subsequent [retryOlder] repeats this seed.
+  ///
+  /// [cancelStrategy] — an optional cancellation strategy for this load;
+  /// otherwise a fresh [ACOperationCancelStrategy] is used. A no-op after
+  /// [dispose].
+  Future<void> reloadOlder({
+    required P params,
+    required Future<R> Function(P params) load,
+    ACCancelStrategy? cancelStrategy,
+  }) =>
+      _older.reload(
+        params: params,
+        load: load,
+        cancelStrategy: cancelStrategy,
+      );
+
+  /// Seeds the newer side with a single page — the anchor and the «newer
+  /// half» of a window around it.
+  ///
+  /// Mirrors [reloadOlder] on the newer side: items are **replaced** by
+  /// `page.items`, [hasMoreNewer] is read from `page.hasMore`,
+  /// [lastResultNewer] is committed, the in-flight load on this side is
+  /// cancelled and its late result discarded.
+  ///
+  /// The page's items must be ordered **anchor → newest** — the same order in
+  /// which [loadNewer] grows the side. The anchor itself belongs to this side.
+  ///
+  /// Independent of the older side; see [reloadOlder] for the caller's
+  /// responsibilities when composing a window from both calls.
+  ///
+  /// Loader exceptions are **propagated outside** and stored in
+  /// [lastErrorNewer]; [isLoadingNewer] is reset via `try/finally`. The call
+  /// is captured as the side's last operation, so a subsequent [retryNewer]
+  /// repeats this seed.
+  ///
+  /// [cancelStrategy] — an optional cancellation strategy for this load;
+  /// otherwise a fresh [ACOperationCancelStrategy] is used. A no-op after
+  /// [dispose].
+  Future<void> reloadNewer({
+    required P params,
+    required Future<R> Function(P params) load,
+    ACCancelStrategy? cancelStrategy,
+  }) =>
+      _newer.reload(
+        params: params,
+        load: load,
+        cancelStrategy: cancelStrategy,
+      );
 
   /// Loads the next older page, appending to [itemsOlder].
   ///
