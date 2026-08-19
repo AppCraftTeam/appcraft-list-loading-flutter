@@ -300,12 +300,20 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   // ---------------------------------------------------------------------------
 
   /// Whether more older items can be loaded via [loadOlder].
+  ///
+  /// After [reloadOlder] this is read from the seed page's `hasMore` and
+  /// describes what lies **beyond** the window's older edge, not what the
+  /// window itself contains.
   bool get hasMoreOlder => _older.hasMore;
 
   /// Manually sets the older side's next-page flag (guard for [loadOlder]).
   set hasMoreOlder(bool value) => _older.hasMore = value;
 
   /// Whether more newer items can be loaded via [loadNewer].
+  ///
+  /// After [reloadNewer] this is read from the seed page's `hasMore` and
+  /// describes what lies **beyond** the window's newer edge, not what the
+  /// window itself contains.
   bool get hasMoreNewer => _newer.hasMore;
 
   /// Manually sets the newer side's next-page flag (guard for [loadNewer]).
@@ -329,13 +337,19 @@ final class ACAnchoredDispatcher<P extends ACParamsMixin,
   /// Reactive channel mirroring [isLoadingAround].
   ValueListenable<bool> get loadingAroundListenable => _aroundLoading;
 
-  /// The last page returned by [loadOlder], or `null`.
+  /// The last page returned by [reloadOlder] or [loadOlder], or `null`.
+  ///
+  /// Committed by the seed as well as by every edge load, so the initial
+  /// cursor and the subsequent ones are read from this same member.
   R? get lastResultOlder => _older.lastResult;
 
-  /// The last page returned by [loadNewer], or `null`.
+  /// The last page returned by [reloadNewer] or [loadNewer], or `null`.
   ///
-  /// `null` right after a [loadAround] (the newer side was seeded, not loaded)
-  /// — read the initial cursors from [lastAround] in that case.
+  /// Committed by the seed as well as by every edge load, so the initial
+  /// cursor and the subsequent ones are read from this same member.
+  ///
+  /// The one exception is the deprecated `loadAround`, which seeds the newer
+  /// side without loading it and therefore leaves this `null`.
   R? get lastResultNewer => _newer.lastResult;
 
   /// The last around-page seeded by [loadAround], or `null`.

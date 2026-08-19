@@ -209,4 +209,175 @@ void main() {
       dispatcher = _build();
     });
   });
+
+  // =====================================================================
+  // US2 — the «is there more beyond the window» flags come from the pages
+  // =====================================================================
+  group('ACAnchoredDispatcher — hasMore flags after seeding (US2/016)', () {
+    late ACAnchoredDispatcher<_Params, _Page, int> dispatcher;
+
+    setUp(() {
+      dispatcher = _build();
+    });
+
+    tearDown(() {
+      dispatcher.dispose();
+    });
+
+    test('hasMoreOlder_takenFromOlderPage', () async {
+      // Act
+      await dispatcher.reloadOlder(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[9, 8], hasMore: true),
+      );
+
+      // Assert
+      expect(dispatcher.hasMoreOlder, isTrue);
+    });
+
+    test('hasMoreNewer_takenFromNewerPage', () async {
+      // Act
+      await dispatcher.reloadNewer(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[10], hasMore: false),
+      );
+
+      // Assert
+      expect(dispatcher.hasMoreNewer, isFalse);
+    });
+
+    test('bothFlags_independentlySourcedFromTheirOwnPage', () async {
+      // Act — asymmetric flags: history continues, the feed ends.
+      await _seedWindow(dispatcher, hasMoreOlder: true, hasMoreNewer: false);
+
+      // Assert
+      expect(dispatcher.hasMoreOlder, isTrue);
+      expect(dispatcher.hasMoreNewer, isFalse);
+    });
+
+    test('seedingOneSide_doesNotChangeOppositeFlag', () async {
+      // Arrange
+      await _seedWindow(dispatcher, hasMoreOlder: true, hasMoreNewer: true);
+
+      // Act — reseed only the newer side with hasMore == false.
+      await dispatcher.reloadNewer(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[10], hasMore: false),
+      );
+
+      // Assert — the older flag is untouched.
+      expect(dispatcher.hasMoreOlder, isTrue);
+      expect(dispatcher.hasMoreNewer, isFalse);
+    });
+
+    test('hasMoreOlderFalse_blocksLoadOlderWithoutForce', () async {
+      // Arrange — the older side reports it reached the end of history.
+      await dispatcher.reloadOlder(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[9, 8], hasMore: false),
+      );
+      final loader = FakeLoader<_Page>();
+      loader.enqueueValue(const _Page(items: <int>[7], hasMore: false));
+
+      // Act
+      await dispatcher.loadOlder(params: const _Params(), load: loader.call);
+
+      // Assert — the guard held.
+      expect(loader.callCount, 0);
+      expect(dispatcher.itemsOlder, equals(<int>[9, 8]));
+    });
+  });
+
+  // =====================================================================
+  // US3 — edge loading keeps working from the window's borders
+  // =====================================================================
+  group('ACAnchoredDispatcher — edge loading after seeding (US3/016)', () {
+    late ACAnchoredDispatcher<_Params, _Page, int> dispatcher;
+
+    setUp(() {
+      dispatcher = _build();
+    });
+
+    tearDown(() {
+      dispatcher.dispose();
+    });
+
+    test('loadOlder_appendsToOlderTail_doesNotOverwriteSeed', () async {
+      // Arrange
+      await _seedWindow(dispatcher);
+
+      // Act
+      await dispatcher.loadOlder(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[6, 5], hasMore: false),
+      );
+
+      // Assert — appended, seed preserved.
+      expect(dispatcher.itemsOlder, equals(<int>[9, 8, 7, 6, 5]));
+    });
+
+    test('loadNewer_appendsToNewerTail_doesNotOverwriteSeed', () async {
+      // Arrange
+      await _seedWindow(dispatcher);
+
+      // Act
+      await dispatcher.loadNewer(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[12], hasMore: false),
+      );
+
+      // Assert
+      expect(dispatcher.itemsNewer, equals(<int>[10, 11, 12]));
+    });
+
+    test('bothEdgesLoaded_mergedViewStaysChronological', () async {
+      // Arrange
+      await _seedWindow(dispatcher);
+
+      // Act
+      await dispatcher.loadOlder(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[6, 5], hasMore: false),
+      );
+      await dispatcher.loadNewer(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[12], hasMore: false),
+      );
+
+      // Assert
+      expect(
+        dispatcher.items,
+        equals(<int>[5, 6, 7, 8, 9, 10, 11, 12]),
+      );
+    });
+
+    test('lastResultBothSides_notNullRightAfterSeeding', () async {
+      // The seeds are real loads, so the initial cursors live in the same
+      // members as every subsequent one — no separate source for page one.
+
+      // Act
+      await _seedWindow(dispatcher);
+
+      // Assert
+      expect(dispatcher.lastResultOlder, isNotNull);
+      expect(dispatcher.lastResultNewer, isNotNull);
+      expect(dispatcher.lastResultOlder!.items, equals(<int>[9, 8, 7]));
+      expect(dispatcher.lastResultNewer!.items, equals(<int>[10, 11]));
+    });
+
+    test('lastResult_updatedByEdgeLoads', () async {
+      // Arrange
+      await _seedWindow(dispatcher);
+
+      // Act
+      await dispatcher.loadOlder(
+        params: const _Params(),
+        load: (_) async => _Page(items: const <int>[6, 5], hasMore: false),
+      );
+
+      // Assert — same member, now carrying the edge page.
+      expect(dispatcher.lastResultOlder!.items, equals(<int>[6, 5]));
+      expect(dispatcher.lastResultNewer!.items, equals(<int>[10, 11]));
+    });
+  });
 }
