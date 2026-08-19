@@ -508,6 +508,26 @@ void main() {
       expect(dispatcher.errorAnyListenable.value, same(failure));
     });
 
+    test('failedSeed_resetsLoadingFlags', () async {
+      // Arrange
+      final failure = Exception('boom');
+
+      // Act
+      await expectLater(
+        dispatcher.reloadNewer(
+          params: const _Params(),
+          load: (_) async => throw failure,
+        ),
+        throwsA(same(failure)),
+      );
+
+      // Assert — try/finally released the flags before the throw left.
+      expect(dispatcher.isLoadingNewer, isFalse);
+      expect(dispatcher.isReloadingAny, isFalse);
+      expect(dispatcher.reloadingAnyListenable.value, isFalse);
+      expect(dispatcher.itemsNewer, isEmpty);
+    });
+
     test('lastErrorAny_staysNonNullWhileEitherSideHoldsAnError', () async {
       // Arrange — the older side fails.
       final failure = Exception('older failed');
