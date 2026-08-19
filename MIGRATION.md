@@ -1,3 +1,138 @@
+# Migration guides
+
+## 1.0.0 → 1.1.0 — `loadAround` is deprecated
+
+Nothing breaks in `1.1.0`: existing code compiles and behaves exactly as
+before. What changes is that `loadAround` and the `ACAnchoredPage` model are
+now `@Deprecated` — the analyzer will point you at the replacement, and both
+are scheduled for removal in `2.0.0`.
+
+### Why
+
+`ACAnchoredDispatcher.loadAround` never built a window around an anchor,
+despite its name and its documentation. `ACAnchoredPage` carries a single list,
+which `loadAround` seeded into the **newer** side while unconditionally
+clearing the older one:
+
+```dart
+_newer.mutate((l) => l..clear()..addAll(page.items));
+_older.mutate((l) => l.clear());   // <- always empty, whatever the loader returned
+```
+
+So the older half of a window was not expressible at all. When the anchor
+happened to be the last item of the feed — a chat with no unread messages, for
+instance — the window collapsed to a single element and the whole history sat
+beyond the edge, reachable only by scrolling up, which a short conversation
+does not offer.
+
+### What replaces it
+
+Two independent seeds, one per side, each taking a plain `ACPage`:
+
+| 1.0.0 | 1.1.0 |
+|---|---|
+| `loadAround(params:, load:)` | `reloadOlder(params:, load:)` + `reloadNewer(params:, load:)` |
+| `ACAnchoredPage<T>` (`items`, `hasMoreOlder`, `hasMoreNewer`) | `ACPage<T>` (`items`, `hasMore`) on each side |
+| `lastAround` | `lastResultOlder` / `lastResultNewer` |
+| `isLoadingAround` | `isReloadingAny` |
+| `loadingAroundListenable` | `reloadingAnyListenable` |
+| `lastErrorAround` | `lastErrorAny` |
+| `errorAroundListenable` | `errorAnyListenable` |
+
+### Before / after
+
+```dart
+// Before (1.0.0) — one call, one model, older side always empty
+final class ChatAround with ACAnchoredPage<Msg> {
+  const ChatAround({
+    required this.items,
+    required this.hasMoreOlder,
+    required this.hasMoreNewer,
+    this.olderCursor,
+    this.newerCursor,
+  });
+
+  @override
+  final List<Msg> items;
+  @override
+  final bool hasMoreOlder;
+  @override
+  final bool hasMoreNewer;
+  final String? olderCursor;
+  final String? newerCursor;
+}
+
+await d.loadAround(
+  params: ChatParams(anchorId: anchorId),
+  load: (p) => api.fetchAround(p.anchorId),
+);
+// d.itemsOlder == []  — always
+```
+
+```dart
+// After (1.1.0) — two seeds, the existing per-side page model, both sides filled
+await Future.wait([
+  d.reloadOlder(
+    params: ChatParams(anchorId: anchorId, direction: Direction.previous),
+    load: api.fetchMessages,   // -> ChatPage, items closest-older -> oldest
+  ),
+  d.reloadNewer(
+    params: ChatParams(anchorId: anchorId, direction: Direction.next),
+    load: api.fetchMessages,   // -> ChatPage, items anchor -> newest
+  ),
+]);
+// d.itemsOlder == [m9, m8, m7]; d.itemsNewer == [m10, m11];
+// d.items == [m7, m8, m9, m10, m11]
+```
+
+The `ChatAround` model is no longer needed — the `ChatPage` you already have
+for `loadOlder` / `loadNewer` serves both seeds. Each side's `hasMore` comes
+from its own page and describes what lies beyond that side's edge.
+
+### Cursors
+
+`lastAround` existed only because `loadAround` seeded the newer side without
+loading it, leaving `lastResultNewer` null. The seeds are real loads, so both
+`lastResultOlder` and `lastResultNewer` are populated right after the window is
+built — the initial cursors now come from the same members as every subsequent
+one:
+
+```dart
+// Before
+cursor: d.lastResultOlder?.cursor ?? (d.lastAround as ChatAround?)?.olderCursor,
+
+// After
+cursor: d.lastResultOlder?.cursor,
+```
+
+### What you now own
+
+The package no longer pretends to orchestrate the window. How many requests it
+costs, whether the two seeds run concurrently or one after the other, and what
+to show when only one of them fails — all yours. A failed side keeps its error
+in `lastErrorOlder` / `lastErrorNewer` and can be repeated on its own with
+`retryOlder` / `retryNewer`, which now repeat seeds as well as edge loads.
+
+Changing the anchor means seeding **both** sides again. Each seed cancels its
+own side's in-flight load and discards its late answer, so no leftover from the
+previous anchor can land; seeding just one side is a legitimate call, not a
+race, and the dispatcher does not track which anchor a side came from.
+
+### Screen state
+
+```dart
+// Before
+valueListenable: d.loadingAroundListenable,
+
+// After — true while either side is being seeded, false during edge loads
+valueListenable: d.reloadingAnyListenable,
+```
+
+`lastErrorAny` holds an error while at least one side has one, so a success on
+one side cannot hide a failure on the other.
+
+---
+
 # Migration guide: 0.2.0 → 1.0.0
 
 Version `1.0.0` **removes** the parser-based API entirely. Migration is now
