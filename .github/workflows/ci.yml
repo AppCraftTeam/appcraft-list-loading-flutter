@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A queued run is replaced by a newer one in the same group even without
+# cancel-in-progress, so push runs get a unique group to keep every main commit checked.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Newer Flutter rewrites analysis_options.yaml on pub get and flutter test
+      # (build/platform excludes); analyze and publish must see the committed config.
+      - name: Restore committed analysis options
+        run: git restore analysis_options.yaml example/analysis_options.yaml
+
+      - name: Analyze
+        run: dart analyze --fatal-infos --fatal-warnings
+
+      - name: Test
+        run: flutter test --coverage
+
+      - name: Coverage threshold
+        shell: bash
+        env:
+          MIN_COVERAGE: 70
+        run: |
+          lcov=coverage/lcov.info
+          if [ ! -f "$lcov" ]; then
+            echo "::error::$lcov not found"
+            exit 1
+          fi
+          awk -v min="$MIN_COVERAGE" '
+            /^SF:/ { in_lib = (substr($0, 4) ~ /(^|\/)lib\//) }
+            /^LF:/ && in_lib { lf += substr($0, 4) }
+            /^LH:/ && in_lib { lh += substr($0, 4) }
+            /^end_of_record/ { in_lib = 0 }
+            END {
+              if (lf == 0) {
+                print "::error::No lib/ records in coverage/lcov.info"
+                exit 1
+              }
+              pct = lh * 100 / lf
+              printf "Coverage lib/: %d/%d = %.2f%% (threshold %d%%)\n", lh, lf, pct, min
+              if (lh * 100 < min * lf) {
+                printf "::error::Coverage %.2f%% is below %d%%\n", pct, min
+                exit 1
+              }
+            }
+          ' "$lcov"
+
+      - name: Publish dry-run
+        shell: bash
+        run: |
+          set -o pipefail
+          git restore analysis_options.yaml example/analysis_options.yaml
+          log="$RUNNER_TEMP/publish-dry-run.log"
+          dart pub publish --dry-run 2>&1 | tee "$log"
+          # The exit code does not distinguish warnings from hints across pub versions,
+          # so the summary line is the contract.
+          if ! grep -q 'Package has 0 warnings' "$log"; then
+            echo "::error::dart pub publish --dry-run reported warnings"
+            exit 1
+          fi
