@@ -32,8 +32,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Newer Flutter rewrites analysis_options.yaml on pub get (build/platform excludes).
-      # Analyze the committed config and keep the tree clean for publish --dry-run.
+      # Newer Flutter rewrites analysis_options.yaml on pub get and flutter test
+      # (build/platform excludes); analyze and publish must see the committed config.
       - name: Restore committed analysis options
         run: git restore analysis_options.yaml example/analysis_options.yaml
 
@@ -76,6 +76,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          git restore analysis_options.yaml example/analysis_options.yaml
           log="$RUNNER_TEMP/publish-dry-run.log"
           dart pub publish --dry-run 2>&1 | tee "$log"
           # The exit code does not distinguish warnings from hints across pub versions,
